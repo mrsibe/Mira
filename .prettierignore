@@ -8,3 +8,7 @@ pnpm-lock.yaml
 .DS_Store
 CHANGELOG.md
 .github/workflows
+# Generated, unmodified upstream design tooling
+.pi/skills/impeccable
+.agents/skills/impeccable
+.claude/skills/impeccable
