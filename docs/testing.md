@@ -97,7 +97,8 @@ used by the memory tests to build a migrated database.
 
 ## CI
 
-`.github/workflows/ci.yml` runs three jobs on pull requests to `main`/`master`:
+`.github/workflows/ci.yml` runs three jobs on every pull request (including stacked
+branches), and on pushes to `main`/`master`:
 
 - **frontend** — format, lint, typecheck, Vitest, production build.
 - **ui-smoke** — Playwright Chromium install, production build, `pnpm test:ui`.

@@ -121,6 +121,7 @@ src-tauri/src
 - [架构说明](docs/architecture.md) — 当前设计与目标方向
 - [设计契约](DESIGN.md) — 令牌、布局、无障碍、错误与取消约定
 - [工程与运维](docs/engineering.md) — 构建、CI，以及尚未实现的部分
+- [测试说明](docs/testing.md) — 单元、SQLite 集成和 mock UI smoke
 - [记忆系统](docs/memory-system.md)
 - [项目上下文](docs/project-context.md)
 - [安全说明](docs/security.md)

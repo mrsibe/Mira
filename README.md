@@ -133,6 +133,7 @@ src-tauri/src
 - [Architecture](docs/architecture.md) — current design and target direction
 - [Design Contract](DESIGN.md) — tokens, layout, accessibility, error, and cancellation
 - [Engineering & Ops](docs/engineering.md) — build, CI, and what is still planned
+- [Testing](docs/testing.md) — unit, SQLite integration and mocked UI smoke
 - [Memory System](docs/memory-system.md)
 - [Project Context](docs/project-context.md)
 - [Security](docs/security.md)

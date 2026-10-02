@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+  # Also verify stacked infrastructure PRs targeting a feature branch.
   pull_request:
-    branches: [main, master]
 
 # 同一时间只保留最新的运行，取消挂起的旧运行
 concurrency:
