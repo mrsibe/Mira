@@ -35,23 +35,18 @@ Hard constraints:
 | `pnpm dev`          | Start the Vite dev server                      |
 | `pnpm format`       | Format with Prettier                           |
 | `pnpm format:check` | Check formatting without writing               |
-| `pnpm typecheck`    | Type-check with `tsc --noEmit`                 |
+| `pnpm typecheck`    | Type-check app, tests and test configs         |
+| `pnpm lint`         | ESLint frontend and tests                      |
+| `pnpm test`         | Vitest unit/integration tests, non-watch       |
+| `pnpm test:ui`      | Built-frontend Chromium smoke with mocked IPC  |
 | `pnpm build`        | Type-check and build the production frontend   |
 | `pnpm tauri`        | Run the Tauri CLI (`tauri dev`, `tauri build`) |
 | `cargo test`        | Run Rust unit tests in `src-tauri`             |
 
-Prefer verifying a change with `pnpm format:check`, `pnpm typecheck`, and
-`pnpm build` (and `cargo test` for Rust changes).
-
-## Commands (Planned — Not Available Yet)
-
-The following scripts do **not** exist in `package.json` today. They are
-requirements for an upcoming engineering PR (see
-[docs/engineering.md](docs/engineering.md)) and must not be run as if present:
-
-- `pnpm lint` — frontend linting (no linter configured yet).
-- `pnpm test` — frontend unit tests (not implemented).
-- `pnpm test:ui` — frontend UI tests (not implemented).
+Run `pnpm build` before `pnpm test:ui`. Install its browser with
+`pnpm exec playwright install --with-deps chromium`. See [docs/testing.md](docs/testing.md)
+for fixtures, native prerequisites and coverage limitations. No tests may use a
+live provider, production/user database or actual keyring credentials.
 
 ## Repository Layout
 
@@ -59,6 +54,7 @@ requirements for an upcoming engineering PR (see
 src                 React frontend (components, pages, store, core, i18n, utils)
 src-tauri/src       Rust backend (chat, model, memory, database, secrets, cancellation)
 src-tauri           Tauri config, Cargo manifest, icons
+tests               Vitest unit/integration and mocked-IPC Playwright smoke
 docs                Architecture, memory, project context, security, engineering, ADRs
 .github/workflows   ci.yml (checks) and cd.yml (release)
 public              Fonts and static assets
@@ -79,12 +75,12 @@ updater             Released updater manifest
 ## Before Finishing
 
 - Inspect the diff and preserve unrelated user changes.
-- Run the narrowest relevant tests, `pnpm format:check`, `pnpm typecheck`, and
-  `pnpm build`. For Rust, run `cargo fmt --manifest-path src-tauri/Cargo.toml
---check`, `cargo check --manifest-path src-tauri/Cargo.toml --locked`, and
-  `cargo test --manifest-path src-tauri/Cargo.toml --locked` when available.
-- After the engineering baseline lands, also run its lint/unit/UI checks as
-  appropriate. Never label a mocked browser smoke test as native verification.
+- Run the narrowest relevant tests, `pnpm format:check`, `pnpm lint`,
+  `pnpm typecheck`, `pnpm test`, and `pnpm build`. UI changes also need
+  `pnpm test:ui` and rendered inspection.
+- For Rust, run `cargo fmt --check`, `cargo check --all-targets --locked`, and
+  `cargo test --locked` from `src-tauri` when native prerequisites are available.
+  Never label a mocked browser smoke test as native verification.
 - Update affected contracts/ADRs for intentional scope or boundary changes.
   Explain failures and environment limitations rather than weakening gates.
 - Do not log API keys, authorization headers, raw prompts, memories or messages.
@@ -96,6 +92,7 @@ updater             Released updater manifest
 - [DESIGN.md](DESIGN.md) — tokens, layout, accessibility, error, cancellation.
 - [docs/architecture.md](docs/architecture.md) — current and target architecture.
 - [docs/engineering.md](docs/engineering.md) — build, CI, and operational plan.
+- [docs/testing.md](docs/testing.md) — test layers, commands and limitations.
 - [docs/memory-system.md](docs/memory-system.md) — memory types and flows.
 - [docs/project-context.md](docs/project-context.md) — project context retrieval.
 - [docs/security.md](docs/security.md) — credential and destructive-action notes.

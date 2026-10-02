@@ -93,3 +93,41 @@ pub struct MessageStreamDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chat_message_omits_reasoning_when_absent() {
+        let message = ChatMessage {
+            id: "m1".to_string(),
+            conversation_id: "c1".to_string(),
+            role: "assistant".to_string(),
+            content: "hello".to_string(),
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            reasoning: None,
+        };
+
+        let value = serde_json::to_value(&message).expect("message should serialize");
+        assert!(value.get("reasoning").is_none());
+
+        let with_reasoning = ChatMessage {
+            reasoning: Some("thought".to_string()),
+            ..message
+        };
+        let value = serde_json::to_value(&with_reasoning).expect("message should serialize");
+        assert_eq!(value["reasoning"], "thought");
+    }
+
+    #[test]
+    fn memory_patch_accepts_partial_updates() {
+        let patch: MemoryPatch = serde_json::from_str(r#"{"importance":9,"is_archived":false}"#)
+            .expect("patch should deserialize");
+
+        assert_eq!(patch.importance, Some(9));
+        assert_eq!(patch.is_archived, Some(false));
+        assert!(patch.fact.is_none());
+        assert!(patch.tags.is_none());
+    }
+}

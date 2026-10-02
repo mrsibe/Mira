@@ -624,4 +624,91 @@ mod tests {
             "用户偏好：回答要先给结论"
         ));
     }
+
+    fn memory_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory database should open");
+        database::migrate_for_tests(&conn).expect("schema should migrate");
+        conn
+    }
+
+    #[test]
+    fn sensitive_candidates_are_skipped_during_apply() {
+        let conn = memory_test_conn();
+        let decision = MemoryWriteDecision::Remember(vec![CandidateMemory {
+            fact: "my api key is sk-1234567890".to_string(),
+            memory_type: "saved".to_string(),
+            importance: 8,
+            confidence: 0.9,
+            tags: r#"["saved"]"#.to_string(),
+        }]);
+
+        let changed = apply_memory_decision(&conn, "conversation-1", decision)
+            .expect("decision should apply");
+
+        assert!(changed.is_empty());
+        assert!(database::list_memories(&conn, None, None, Some(false))
+            .expect("memories should list")
+            .is_empty());
+    }
+
+    #[test]
+    fn duplicate_candidates_keep_the_existing_saved_memory() {
+        let conn = memory_test_conn();
+        database::insert_memory(
+            &conn,
+            "用户偏好：喜欢中文短句和直接结论",
+            "saved",
+            8,
+            0.9,
+            r#"["saved"]"#,
+            "",
+        )
+        .expect("memory should insert");
+        let decision = MemoryWriteDecision::Remember(vec![CandidateMemory {
+            fact: "喜欢中文短句和直接结论".to_string(),
+            memory_type: "chat_history".to_string(),
+            importance: 7,
+            confidence: 0.8,
+            tags: r#"["chat_history","auto"]"#.to_string(),
+        }]);
+
+        let changed = apply_memory_decision(&conn, "conversation-1", decision)
+            .expect("decision should apply");
+
+        assert!(changed.is_empty());
+        let memories =
+            database::list_memories(&conn, None, None, Some(false)).expect("memories should list");
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].memory_type.as_deref(), Some("saved"));
+    }
+
+    #[test]
+    fn run_cleanup_lowers_importance_of_stale_unused_memories() {
+        let conn = memory_test_conn();
+        let memory = database::insert_memory(
+            &conn,
+            "项目使用 Tauri 和 SQLite",
+            "project",
+            6,
+            0.7,
+            r#"["project"]"#,
+            "",
+        )
+        .expect("memory should insert");
+        conn.execute(
+            "UPDATE memories SET created_at = datetime('now', '-90 days') WHERE id = ?1",
+            rusqlite::params![memory.id],
+        )
+        .expect("created_at should update");
+
+        let changed = run_cleanup(&conn).expect("cleanup should run");
+
+        assert_eq!(changed, 1);
+        assert_eq!(
+            database::get_memory(&conn, memory.id)
+                .expect("memory should load")
+                .importance,
+            5
+        );
+    }
 }

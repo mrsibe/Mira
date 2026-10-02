@@ -190,7 +190,8 @@ pub async fn send_message(
         } else {
             Vec::new()
         };
-        let user_message = database::insert_message(&conn, &conversation.id, "user", &trimmed, None)?;
+        let user_message =
+            database::insert_message(&conn, &conversation.id, "user", &trimmed, None)?;
         let model_settings = database::get_model_settings(&conn)?;
         let chat_model_config_id = model_config_id
             .as_deref()
@@ -276,8 +277,13 @@ pub async fn send_message(
             .conn
             .lock()
             .map_err(|_| "Database lock is poisoned".to_string())?;
-        let assistant_message =
-            database::insert_message(&conn, &conversation.id, "assistant", &assistant_content, Some(&assistant_reasoning))?;
+        let assistant_message = database::insert_message(
+            &conn,
+            &conversation.id,
+            "assistant",
+            &assistant_content,
+            Some(&assistant_reasoning),
+        )?;
         let updated_title = if conversation.title == "新对话" {
             Some(title_from_content(&trimmed))
         } else {
@@ -362,10 +368,7 @@ pub fn save_model_config(
 }
 
 #[tauri::command]
-pub fn delete_model_config(
-    state: State<'_, DbState>,
-    id: String,
-) -> Result<(), String> {
+pub fn delete_model_config(state: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = state
         .conn
         .lock()
@@ -396,10 +399,7 @@ pub fn get_system_prompt(state: State<'_, DbState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn save_system_prompt(
-    state: State<'_, DbState>,
-    prompt: String,
-) -> Result<(), String> {
+pub fn save_system_prompt(state: State<'_, DbState>, prompt: String) -> Result<(), String> {
     let conn = state
         .conn
         .lock()
@@ -413,8 +413,7 @@ pub fn get_model_api_key(state: State<'_, DbState>, id: String) -> Result<Option
         .conn
         .lock()
         .map_err(|_| "Database lock is poisoned".to_string())?;
-    database::get_model_config(&conn, Some(&id), true)
-        .map(|config| config.api_key)
+    database::get_model_config(&conn, Some(&id), true).map(|config| config.api_key)
 }
 
 #[tauri::command]

@@ -13,7 +13,10 @@ Contributor-facing commands also live in [../AGENTS.md](../AGENTS.md).
 | `pnpm dev`          | Start the Vite dev server for the frontend     |
 | `pnpm format`       | Format the repo with Prettier                  |
 | `pnpm format:check` | Verify formatting without writing              |
-| `pnpm typecheck`    | `tsc --noEmit` type check                      |
+| `pnpm typecheck`    | Typecheck app, tests and test configs          |
+| `pnpm lint`         | ESLint frontend/test checks                    |
+| `pnpm test`         | Vitest unit/integration tests                  |
+| `pnpm test:ui`      | Built-app Chromium smoke with mocked Tauri IPC |
 | `pnpm build`        | Type-check and build the production frontend   |
 | `pnpm tauri`        | Run the Tauri CLI (`tauri dev`, `tauri build`) |
 | `cargo test`        | Run the Rust unit tests in `src-tauri`         |
@@ -25,17 +28,22 @@ example in `memory.rs` and `database.rs`).
 
 `.github/workflows/ci.yml`:
 
-- Triggers on push and pull requests to `main` and `master`.
-- Cancels superseded runs via a `ci-` concurrency group.
-- On `ubuntu-latest` (15-minute timeout):
-  1. Install Node 22 and pnpm `11.1.3`.
-  2. Cache the pnpm store, then `pnpm install --frozen-lockfile`.
-  3. `pnpm format:check`.
-  4. `pnpm typecheck`.
-  5. `pnpm build`.
+- Triggers on pushes to `main`/`master` and all pull requests (including stacked
+  infrastructure branches). Cancels superseded runs via a `ci-` concurrency group.
+- All jobs use `ubuntu-latest`, Node 22, pnpm `11.1.3` and frozen dependencies.
+- One **Verify** job (25-minute timeout): format check → lint → app/test
+  typecheck → Vitest → frontend build → Rust format and `cargo test --locked`.
+  Rust tests compile the native targets, so a separate `cargo check` in CI
+  would duplicate compilation. Frontend dependencies and dist are built once.
+- `pnpm/action-setup` reads the pinned package manager and caches its store;
+  Rust compilation artifacts are cached too. Native dependencies are installed
+  only on the Linux runner.
+- Playwright is local opt-in via `pnpm test:ui`: CI does not download Chromium,
+  launch a preview server or upload browser reports.
 
-CI does **not** currently run a frontend linter, frontend tests, or any Rust
-check. See the gaps below.
+See [testing.md](testing.md) for assertions and limitations. The **Verify** check
+is required evidence before merge; branch-protection rules must use its name if
+enforced remotely. No gate uses `continue-on-error`.
 
 ## Continuous Delivery (Existing)
 
@@ -44,8 +52,9 @@ check. See the gaps below.
 - Triggers on `v*` tags, with `contents: write` permission.
 - Builds a release matrix: `windows-latest`, `macos-latest`, `ubuntu-22.04`
   (60-minute timeout).
-- Installs Node 22, pnpm, Rust stable, caches the Rust target, and installs the
-  Linux webkit/gtk dependencies.
+- Installs Node 22, the pinned pnpm and Rust stable, caches the pnpm store/Rust
+  target, and installs native dependencies on Linux only. Packaging stays out of
+  PR CI; there are no release-time lint/unit/browser-test duplicates.
 - Runs `tauri-apps/tauri-action@v0` to build and publish. Releases are published
   as **drafts** with generated assets.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are read
@@ -62,11 +71,11 @@ check. See the gaps below.
 These are requirements for upcoming engineering PRs. None exist in the repo
 today, and none should be described as available.
 
-- **Frontend linting.** No `lint` script or linter config is present.
-- **Automated tests.** No `test` or `test:ui` script is present. Rust unit tests
-  exist but run only when invoked manually; they are not in CI.
-- **Rust checks in CI.** `cargo fmt --check`, `cargo clippy`, and `cargo test`
-  are not part of `.github/workflows/ci.yml`.
+- **Further static analysis.** Rust fmt/test are in CI (tests compile native
+  targets); `cargo clippy` is not yet a gate. Existing Markdown helper `any` usage is reported as lint
+  warnings, not silently disabled.
+- **Native end-to-end tests.** Automated browser smoke replaces native IPC and
+  cannot prove OS keyring, live-provider behavior or persistent desktop restart.
 - **Structured logging and observability.** The backend currently returns error
   strings to the frontend; there is no structured logging, log level control, or
   local log retention story.
@@ -81,9 +90,10 @@ today, and none should be described as available.
 
 ## Validation Priorities
 
-The test/CI baseline should cover memory selection/filtering, conversation
-lifecycle, provider configuration, stream parsing, cancellation state and SQLite
-schema initialization/migration. Once a Pi adapter exists, add contract tests
+The baseline now covers memory selection/filtering, conversation lifecycle,
+provider selection/IPC configuration, SSE framing, cancellation state and
+in-memory SQLite schema initialization/idempotency. Old-version migration
+fixtures, prompt-token limits and transport cancellation remain follow-up work. Once a Pi adapter exists, add contract tests
 for its events, errors and cancellation before switching the default runtime.
 Avoid live-provider calls or OS-keyring access in automated tests.
 
