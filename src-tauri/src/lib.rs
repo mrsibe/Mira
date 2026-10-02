@@ -5,6 +5,7 @@ mod chat;
 mod database;
 mod memory;
 mod model;
+mod runtime;
 mod secrets;
 mod types;
 

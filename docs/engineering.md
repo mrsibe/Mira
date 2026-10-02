@@ -8,21 +8,25 @@ Contributor-facing commands also live in [../AGENTS.md](../AGENTS.md).
 
 ## Local Commands (Existing)
 
-| Command             | What it does                                   |
-| ------------------- | ---------------------------------------------- |
-| `pnpm dev`          | Start the Vite dev server for the frontend     |
-| `pnpm format`       | Format the repo with Prettier                  |
-| `pnpm format:check` | Verify formatting without writing              |
-| `pnpm typecheck`    | Typecheck app, tests and test configs          |
-| `pnpm lint`         | ESLint frontend/test checks                    |
-| `pnpm test`         | Vitest unit/integration tests                  |
-| `pnpm test:ui`      | Built-app Chromium smoke with mocked Tauri IPC |
-| `pnpm build`        | Type-check and build the production frontend   |
-| `pnpm tauri`        | Run the Tauri CLI (`tauri dev`, `tauri build`) |
-| `cargo test`        | Run the Rust unit tests in `src-tauri`         |
+| Command              | What it does                                     |
+| -------------------- | ------------------------------------------------ |
+| `pnpm runtime:build` | Compile the standalone Pi AI host-target sidecar |
+| `pnpm runtime:test`  | Build and run offline compiled-sidecar fixtures  |
+| `pnpm dev`           | Start the Vite dev server for the frontend       |
+| `pnpm format`        | Format the repo with Prettier                    |
+| `pnpm format:check`  | Verify formatting without writing                |
+| `pnpm typecheck`     | Typecheck app, tests and test configs            |
+| `pnpm lint`          | ESLint frontend/test checks                      |
+| `pnpm test`          | Vitest unit/integration tests                    |
+| `pnpm test:ui`       | Built-app Chromium smoke with mocked Tauri IPC   |
+| `pnpm build`         | Type-check and build the production frontend     |
+| `pnpm tauri`         | Run the Tauri CLI (`tauri dev`, `tauri build`)   |
+| `cargo test`         | Run the Rust unit tests in `src-tauri`           |
 
 `cargo test` runs the existing `#[cfg(test)]` tests in `src-tauri/src` (for
-example in `memory.rs` and `database.rs`).
+example in `memory.rs` and `database.rs`). Run `pnpm runtime:build` first for
+standalone Cargo checks. Tauri dev/build hooks compile the sidecar automatically;
+Bun is pinned in the runtime workspace and is not an end-user prerequisite.
 
 ## Continuous Integration (Existing)
 
@@ -32,7 +36,8 @@ example in `memory.rs` and `database.rs`).
   infrastructure branches). Cancels superseded runs via a `ci-` concurrency group.
 - All jobs use `ubuntu-latest`, Node 22, pnpm `11.1.3` and frozen dependencies.
 - One **Verify** job (25-minute timeout): format check → lint → app/test
-  typecheck → Vitest → frontend build → Rust format and `cargo test --locked`.
+  typecheck → Vitest → frontend build → compiled Pi runtime tests → Rust format,
+  `cargo test --locked` and the ignored compiled-runtime bridge test.
   Rust tests compile the native targets, so a separate `cargo check` in CI
   would duplicate compilation. Frontend dependencies and dist are built once.
 - `pnpm/action-setup` reads the pinned package manager and caches its store;
@@ -55,6 +60,9 @@ enforced remotely. No gate uses `continue-on-error`.
 - Installs Node 22, the pinned pnpm and Rust stable, caches the pnpm store/Rust
   target, and installs native dependencies on Linux only. Packaging stays out of
   PR CI; there are no release-time lint/unit/browser-test duplicates.
+- The Tauri before-build hook compiles the Pi AI sidecar and packages it as an
+  external binary. Builds support the release matrix's native targets; no Node
+  installation is needed by users. Linux x64/Windows x64 use baseline CPU builds.
 - Runs `tauri-apps/tauri-action@v0` to build and publish. Releases are published
   as **drafts** with generated assets.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are read
@@ -91,10 +99,10 @@ today, and none should be described as available.
 ## Validation Priorities
 
 The baseline now covers memory selection/filtering, conversation lifecycle,
-provider selection/IPC configuration, SSE framing, cancellation state and
-in-memory SQLite schema initialization/idempotency. Old-version migration
-fixtures, prompt-token limits and transport cancellation remain follow-up work. Once a Pi adapter exists, add contract tests
-for its events, errors and cancellation before switching the default runtime.
+provider selection/IPC configuration, Pi JSONL framing, compiled-sidecar
+streaming/error/retry/abort fixtures, cancellation state and in-memory SQLite
+schema initialization/idempotency. Old-version migration fixtures, prompt-token
+limits and complete native desktop verification remain follow-up work.
 Avoid live-provider calls or OS-keyring access in automated tests.
 
 Keep a few UI smoke cases: new chat, send, stream, switch conversation. A mocked

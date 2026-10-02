@@ -55,6 +55,9 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev patchelf libssl-dev
 
+      - name: Pi runtime build and offline contract tests
+        run: pnpm runtime:test
+
       # cargo test compiles the library, binary and tests; a separate check
       # would repeat that work. The frontend dist was already built above.
       - name: Rust checks
@@ -62,3 +65,4 @@ jobs:
         run: |
           cargo fmt --check
           cargo test --locked
+          cargo test --locked compiled_runtime -- --ignored

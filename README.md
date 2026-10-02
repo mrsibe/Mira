@@ -71,7 +71,7 @@ Output lands in `src-tauri/target/release/bundle/`.
 | ----------- | --------------------------------------------- |
 | Frontend    | React 19 · TypeScript · TailwindCSS · Zustand |
 | Desktop     | Tauri 2                                       |
-| Backend     | Rust · OpenAI-compatible HTTP model gateway   |
+| Backend     | Rust native services · Pi AI runtime sidecar  |
 | Storage     | SQLite (local file)                           |
 | Credentials | OS keyring                                    |
 | i18n        | Lightweight built-in (en / zh)                |
@@ -101,7 +101,7 @@ the shipped design and the approved (not-yet-implemented) target direction.
 React UI / Zustand
   ↓ invoke / events
 Tauri Commands (Rust application coordination)
-  ├── Model Gateway → configured provider
+  ├── Model adapter → standalone Pi AI runtime → configured provider
   ├── Memory extraction / retrieval
   ├── SQLite (persistent user data)
   └── OS keyring (credentials)
@@ -122,10 +122,20 @@ src-tauri/src
 ├── chat.rs         # Tauri command handlers
 ├── database.rs     # SQLite data layer
 ├── memory.rs       # Memory extraction & injection
-├── model.rs        # OpenAI-compatible model gateway
+├── model.rs        # Mira context assembly / runtime adapter
+├── runtime.rs      # Private JSONL process bridge
 ├── secrets.rs      # OS credential store access
 └── types.rs        # Shared types
+
+runtime            # Pi AI inference, standalone binary build and offline tests
 ```
+
+The first Pi migration preserves OpenAI-compatible settings; native provider
+catalogs, OAuth and tools are not enabled. Tauri dev/build hooks compile the
+sidecar with pinned Bun (installed by pnpm). For standalone Rust checks, first
+run `pnpm runtime:build`; `pnpm runtime:test` runs offline compiled-runtime
+fixtures. See [ADR 0006](docs/adr/0006-pi-ai-sidecar.md) for boundaries and the
+binary-size tradeoff.
 
 ## Docs
 

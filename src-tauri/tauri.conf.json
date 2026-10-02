@@ -4,9 +4,9 @@
   "version": "0.0.5",
   "identifier": "com.mrsibe.mira",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm runtime:build && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm runtime:build && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -28,6 +28,8 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "externalBin": ["binaries/mira-runtime"],
+    "resources": ["../runtime/NOTICE.md"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

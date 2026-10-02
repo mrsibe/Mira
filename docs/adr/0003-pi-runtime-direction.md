@@ -1,6 +1,6 @@
 # ADR 0003: Target the UI → Mira App Core → Pi Runtime Split
 
-- **Status:** Accepted (implementation pending)
+- **Status:** Accepted (App Core split pending; gateway phase 1 in ADR 0006)
 - **Date:** 2026-10-02
 
 ## Context
@@ -8,8 +8,9 @@
 Mira's current backend mixes app logic with inference and native concerns inside
 the Tauri Rust process. As the product grows, the team wants a clearer boundary
 between presentation, application logic, inference/session handling, and native
-desktop capabilities. This ADR records the agreed target direction only; none
-of it is implemented yet.
+desktop capabilities. This ADR records the agreed target direction.
+[ADR 0006](0006-pi-ai-sidecar.md) implements the first gateway replacement, not
+the full App Core split.
 
 ## Decision
 
@@ -59,7 +60,6 @@ integration ADR and tests; this decision does not enable autonomous tools.
 
 ## Status Note
 
-This is a direction, not a design. No Pi implementation exists in this
-repository, and no IPC commands, message schemas, process model, or integration
-protocol are defined here. Any implementation work must produce its own design
-before it can be considered approved.
+This is a direction, not the integration design. The phase-1 Pi AI sidecar's
+protocol and packaging are now defined in [ADR 0006](0006-pi-ai-sidecar.md).
+The full Application API/App Core migration remains pending.

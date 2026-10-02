@@ -2,6 +2,8 @@ node_modules
 dist
 src-tauri/target
 src-tauri/gen
+src-tauri/binaries
+.pi/subagents/
 pnpm-lock.yaml
 *.sqlite3
 *.log

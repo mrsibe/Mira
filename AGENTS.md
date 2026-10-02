@@ -15,7 +15,8 @@ Hard constraints:
 - **Never store API keys in SQLite.** Keys live in the OS credential store
   (`src-tauri/src/secrets.rs`); the database holds only provider metadata.
 - UI must not access SQLite or model providers directly. Today persistence and
-  model I/O are in Rust, with application coordination in the Zustand store.
+  model context/IPC are coordinated in Rust, with application coordination in
+  the Zustand store. Model inference runs in the private Pi AI sidecar.
 - Target direction: UI → Application API → Mira App Core → separate Pi runtime
   and native-service adapters. React owns presentation, Pi owns inference/session
   execution, Tauri owns native capabilities, SQLite owns persistent user data.
@@ -30,19 +31,23 @@ Hard constraints:
 
 ## Commands (Existing)
 
-| Command             | What it does                                   |
-| ------------------- | ---------------------------------------------- |
-| `pnpm dev`          | Start the Vite dev server                      |
-| `pnpm format`       | Format with Prettier                           |
-| `pnpm format:check` | Check formatting without writing               |
-| `pnpm typecheck`    | Type-check app, tests and test configs         |
-| `pnpm lint`         | ESLint frontend and tests                      |
-| `pnpm test`         | Vitest unit/integration tests, non-watch       |
-| `pnpm test:ui`      | Built-frontend Chromium smoke with mocked IPC  |
-| `pnpm build`        | Type-check and build the production frontend   |
-| `pnpm tauri`        | Run the Tauri CLI (`tauri dev`, `tauri build`) |
-| `cargo test`        | Run Rust unit tests in `src-tauri`             |
+| Command              | What it does                                      |
+| -------------------- | ------------------------------------------------- |
+| `pnpm runtime:build` | Compile the standalone Pi AI sidecar for the host |
+| `pnpm runtime:test`  | Build and run offline compiled-runtime fixtures   |
+| `pnpm dev`           | Start the Vite dev server                         |
+| `pnpm format`        | Format with Prettier                              |
+| `pnpm format:check`  | Check formatting without writing                  |
+| `pnpm typecheck`     | Type-check app, tests and test configs            |
+| `pnpm lint`          | ESLint frontend and tests                         |
+| `pnpm test`          | Vitest unit/integration tests, non-watch          |
+| `pnpm test:ui`       | Built-frontend Chromium smoke with mocked IPC     |
+| `pnpm build`         | Type-check and build the production frontend      |
+| `pnpm tauri`         | Run the Tauri CLI (`tauri dev`, `tauri build`)    |
+| `cargo test`         | Run Rust unit tests in `src-tauri`                |
 
+Run `pnpm runtime:build` before standalone Cargo checks; Tauri dev/build hooks
+compile the sidecar automatically. Run `pnpm runtime:test` for runtime changes.
 Run `pnpm build` before `pnpm test:ui`. Install its browser with
 `pnpm exec playwright install --with-deps chromium`. See [docs/testing.md](docs/testing.md)
 for fixtures, native prerequisites and coverage limitations. No tests may use a
@@ -52,6 +57,7 @@ live provider, production/user database or actual keyring credentials.
 
 ```txt
 src                 React frontend (components, pages, store, core, i18n, utils)
+runtime             Private Pi AI inference sidecar, build and offline tests
 src-tauri/src       Rust backend (chat, model, memory, database, secrets, cancellation)
 src-tauri           Tauri config, Cargo manifest, icons
 tests               Vitest unit/integration and mocked-IPC Playwright smoke

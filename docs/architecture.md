@@ -6,8 +6,9 @@ architecture document. It has two clearly separated parts:
 - **Current architecture (as shipped)** — what the code in this repository
   actually does today.
 - **Approved target architecture (not yet implemented)** — the agreed direction
-  for a future app-core/runtime split. No part of this is built yet, and no IPC
-  or protocol design is fixed here.
+  for a future app-core/runtime split. The phase-1 Pi AI gateway adapter is
+  implemented; application coordination and the full App Core split remain pending.
+  Its private protocol is recorded in [ADR 0006](adr/0006-pi-ai-sidecar.md).
 
 Product boundaries are defined in [../PRODUCT.md](../PRODUCT.md); the UI
 contract is in [../DESIGN.md](../DESIGN.md).
@@ -22,14 +23,15 @@ Tauri 2 desktop shell (src-tauri, Rust)
   │
   ├── chat.rs        Tauri commands: send_message, conversations, projects,
   │                  memories, model configs, system prompt, cleanup
-  ├── model.rs       OpenAI-compatible chat completions gateway (SSE streaming)
+  ├── model.rs       Mira context assembly and model adapter
+  ├── runtime.rs     private JSONL child-process bridge to Pi AI
   ├── memory.rs      memory planner, retrieval, cleanup, sensitive filtering
   ├── secrets.rs     OS credential store access
   ├── database.rs    SQLite schema, migrations, queries, FTS5 indexes
   └── cancellation.rs cancel flag for the in-flight stream
   ├── Local durable state: SQLite file
   ├── Credentials: OS keyring
-  └── Network (model.rs): user-configured OpenAI-compatible provider
+  └── Pi AI sidecar (runtime/): user-configured OpenAI-compatible provider
 ```
 
 ### Frontend (Presentation)
@@ -63,7 +65,8 @@ that the current store is already presentation-only.
 | Module            | Responsibility                                                               |
 | ----------------- | ---------------------------------------------------------------------------- |
 | `chat.rs`         | Tauri command handlers for chat, conversations, projects, memories, settings |
-| `model.rs`        | OpenAI-compatible gateway: request build, retries, SSE stream parse          |
+| `model.rs`        | Mira context construction and Pi runtime adapter                             |
+| `runtime.rs`      | Private versioned JSONL, bounded process I/O, cancellation and child cleanup |
 | `memory.rs`       | Memory planner, retrieval, cleanup, sensitive-content filtering              |
 | `database.rs`     | SQLite schema, migrations, queries, FTS5 trigram indexes                     |
 | `secrets.rs`      | Read/write/delete API keys in the OS credential store                        |
@@ -72,14 +75,17 @@ that the current store is already presentation-only.
 
 ### Model Gateway
 
-- Requests target `{base_url}/chat/completions` with bearer auth and
-  `stream: true`.
-- The response is consumed as an SSE byte stream and parsed incrementally; text
-  and reasoning deltas are forwarded to the UI through `message_stream_delta`.
-- Failed sends are retried up to 3 attempts for connection/timeout errors and
-  for HTTP `429` / `5xx` responses, with a short backoff. Connect timeout is 15s
-  and response-header timeout is 45s.
-- Model HTTP requests are made from Rust (`reqwest`), not from the webview.
+- Rust prepares context and passes it, with the keyring-resolved credential,
+  over private stdin to a per-request standalone Pi AI process (`runtime/`).
+- Existing configs still target `{base_url}/chat/completions`. Pi's adapter owns
+  HTTP, SSE parsing, reasoning and SDK retries (two retries, 45s HTTP timeout).
+- Versioned JSONL text/thinking events are mapped to `message_stream_delta`.
+  Rust owns bounded framing, process cleanup and cancellation even while stalled.
+- Memory planner inference uses the same bridge; extraction rules and fallback
+  heuristics remain Mira's responsibility.
+- No provider access from the webview, tools, Pi sessions or credential files.
+  Native provider APIs/catalogs and OAuth are deferred. See
+  [ADR 0006](adr/0006-pi-ai-sidecar.md) for protocol and packaging constraints.
 
 ### Memory
 
@@ -107,7 +113,7 @@ that the current store is already presentation-only.
   `get_model_api_key` can return the actual key for explicit settings edits, so
   frontend memory must still be treated as sensitive.
 - The webview content security policy limits `connect-src` to the app and the
-  updater endpoints; model traffic originates from the Rust process.
+  updater endpoints; model traffic originates from the bundled Pi sidecar process.
 
 ### Current Scope Boundary (MVP)
 
@@ -168,10 +174,10 @@ Layer responsibilities and hard boundaries:
   a separate integration design. Reusing that ecosystem does not authorize
   tools, file editing or autonomous workflows in the product.
 
-This section intentionally stops at layer responsibilities. No IPC commands,
-message schemas, process model, or Pi integration design are defined here; that
-design is pending implementation. Any future work in this direction must not
-assume details recorded in this document.
+This section defines the full target's layer responsibilities, not a claim that
+application coordination has moved out of Rust/Zustand. The gateway migration's
+process model and private protocol are defined in [ADR 0006](adr/0006-pi-ai-sidecar.md).
+Provider catalogs/OAuth and the full Application API/App Core remain pending.
 
 ## Frontend Structure Reference
 

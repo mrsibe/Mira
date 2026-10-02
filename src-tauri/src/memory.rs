@@ -1,9 +1,10 @@
 use crate::database;
+use crate::runtime::{self, RuntimeConfig, RuntimeMessage, StreamRequest};
 use crate::types::{Memory, MemoryPatch, ModelConfig};
-use reqwest::Client;
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashSet;
+use std::sync::atomic::AtomicBool;
 
 const MAX_INJECTED_MEMORIES: i64 = 6;
 const MEMORY_PLANNER_PROMPT: &str = r#"你是 Mira 的长期记忆 planner。只输出 JSON，不要输出解释。
@@ -166,35 +167,6 @@ struct PlannerMemory {
     tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize)]
-struct PlannerRequest {
-    model: String,
-    messages: Vec<PlannerMessage>,
-    stream: bool,
-    temperature: f32,
-}
-
-#[derive(Debug, Serialize)]
-struct PlannerMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct PlannerCompletion {
-    choices: Vec<PlannerChoice>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PlannerChoice {
-    message: PlannerChoiceMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct PlannerChoiceMessage {
-    content: Option<String>,
-}
-
 fn should_retrieve_memories(content: &str) -> bool {
     let lowered = content.to_lowercase();
     let markers = [
@@ -285,46 +257,40 @@ async fn plan_memory_write_with_llm(
         .clone()
         .filter(|value| !value.trim().is_empty() && value != "******")
         .ok_or_else(|| "Memory planner model config has no API key".to_string())?;
-    let endpoint = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
     let user_block = format!(
         "用户消息：\n{}\n\n助手回复：\n{}",
         compact_for_planner(user_content, 1600),
         compact_for_planner(assistant_content, 1600)
     );
-    let response = Client::new()
-        .post(endpoint)
-        .bearer_auth(api_key)
-        .json(&PlannerRequest {
+    let request = StreamRequest {
+        config: RuntimeConfig {
+            provider: config.provider.clone(),
+            name: config.name.clone(),
+            base_url: config.base_url.clone(),
             model: config.model.clone(),
-            messages: vec![
-                PlannerMessage {
-                    role: "system".to_string(),
-                    content: MEMORY_PLANNER_PROMPT.to_string(),
-                },
-                PlannerMessage {
-                    role: "user".to_string(),
-                    content: user_block,
-                },
-            ],
-            stream: false,
-            temperature: 0.0,
-        })
-        .send()
+            api_key,
+        },
+        messages: vec![
+            RuntimeMessage {
+                role: "system".to_string(),
+                content: MEMORY_PLANNER_PROMPT.to_string(),
+            },
+            RuntimeMessage {
+                role: "user".to_string(),
+                content: user_block,
+            },
+        ],
+        temperature: Some(0.1),
+    };
+    // The background pass has no user-facing cancel control; it owns its own
+    // never-set flag so the shared chat cancellation cannot abort it.
+    let cancel_requested = AtomicBool::new(false);
+    let mut on_delta = |_: &str| -> Result<(), String> { Ok(()) };
+    let mut on_thinking = |_: &str| -> Result<(), String> { Ok(()) };
+    let content = runtime::complete(request, &mut on_delta, &mut on_thinking, &cancel_requested)
         .await
-        .map_err(|error| format!("Memory planner request failed: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("Memory planner HTTP {}", response.status()));
-    }
-    let completion = response
-        .json::<PlannerCompletion>()
-        .await
-        .map_err(|error| format!("Memory planner response parse failed: {error}"))?;
-    let content = completion
-        .choices
-        .first()
-        .and_then(|choice| choice.message.content.as_deref())
-        .ok_or_else(|| "Memory planner returned empty content".to_string())?;
-    parse_planner_response(content)
+        .map_err(|error| format!("Memory planner runtime failed: {}", error.message()))?;
+    parse_planner_response(&content)
 }
 
 fn parse_planner_response(content: &str) -> Result<MemoryWriteDecision, String> {

@@ -6,6 +6,20 @@ Current model-config saves store API keys through the operating system credentia
 
 Startup does **not** migrate or clear legacy SQLite API-key values. Existing databases may retain keys from older versions. Treat database files and backups as sensitive regardless: they also contain private conversations and memories. Never add new credential storage to SQLite.
 
+## Pi Runtime Boundary
+
+Inference runs in a bundled private sidecar, not React. Rust sends the prepared
+context and keyring-resolved API key over stdin only, never command-line
+arguments, credential files or environment variables. Each request owns its
+process; no credential or conversation session is shared with other requests.
+The sidecar has no database, keyring, tools or coding-agent integration.
+
+The host validates version/ID/type and bounds JSONL size and process waits.
+Cancellation terminates that request's child. stdout is protocol-only; stderr
+is discarded and SDK failures are redacted rather than forwarding raw bodies.
+This is a process boundary, not an OS sandbox: the sidecar executes with the
+user's privileges. No claim of sandboxed filesystem/network access is made.
+
 ## Destructive Actions
 
 The UI asks for confirmation before deleting conversations, projects, or memories. Archive is reversible; delete is not.

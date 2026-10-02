@@ -2,6 +2,8 @@ node_modules
 dist
 src-tauri/target
 src-tauri/gen
+src-tauri/binaries
+.pi/subagents/
 *.sqlite3
 *.log
 .DS_Store

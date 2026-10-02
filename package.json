@@ -7,13 +7,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "runtime:build": "pnpm --filter @mira/runtime build",
+    "runtime:test": "pnpm runtime:build && pnpm --filter @mira/runtime test",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json && pnpm --filter @mira/runtime typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "playwright test"

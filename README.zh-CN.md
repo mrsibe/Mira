@@ -70,7 +70,7 @@ pnpm tauri build
 | -------- | --------------------------------------------- |
 | 前端     | React 19 · TypeScript · TailwindCSS · Zustand |
 | 桌面框架 | Tauri 2                                       |
-| 后端     | Rust · OpenAI-compatible HTTP 模型网关        |
+| 后端     | Rust 原生服务 · Pi AI runtime sidecar         |
 | 存储     | SQLite（本地文件）                            |
 | 凭据     | 系统凭据库（keyring）                         |
 | 国际化   | 轻量自建 i18n（中/英）                        |
@@ -89,7 +89,7 @@ Mira 自己没有任何后端服务，也不会把数据上传到 Mira 服务器
 React UI / Zustand
   ↓ invoke / events
 Tauri Commands（Rust 应用协调）
-  ├── Model Gateway → 配置的服务商
+  ├── Model adapter → 独立 Pi AI runtime → 配置的服务商
   ├── 记忆提取 / 检索
   ├── SQLite（持久化用户数据）
   └── OS keyring（凭据）
@@ -110,10 +110,18 @@ src-tauri/src
 ├── chat.rs         # Tauri 命令入口
 ├── database.rs     # SQLite 数据层
 ├── memory.rs       # 记忆提炼 & 注入
-├── model.rs        # OpenAI-compatible 模型网关
+├── model.rs        # Mira 上下文构建 / runtime adapter
+├── runtime.rs      # 私有 JSONL 进程桥接
 ├── secrets.rs      # 系统凭据库读写
 └── types.rs        # 共享类型
+
+runtime            # Pi AI 推理、独立二进制构建与离线测试
 ```
+
+第一阶段保留 OpenAI-compatible 设置，不启用原生 Provider 目录、OAuth 或 Tools。
+Tauri dev/build 会自动使用锁定版本的 Bun 编译 sidecar（由 pnpm 安装，最终用户无需安装）。
+单独执行 Rust 检查前请先运行 `pnpm runtime:build`；`pnpm runtime:test` 验证编译后的 runtime。
+进程边界与二进制体积代价见 [ADR 0006](docs/adr/0006-pi-ai-sidecar.md)。
 
 ## 文档
 
