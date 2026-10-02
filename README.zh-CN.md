@@ -6,7 +6,7 @@
 
 仿照 ChatGPT 设计 · 本地优先 · 轻量 · 易于改造
 
-[功能](#功能) · [为什么做](#为什么做-mira) · [快速开始](#快速开始) · [技术栈](#技术栈) · [贡献](#欢迎-fork)
+[功能](#功能) · [为什么做](#为什么做-mira) · [快速开始](#快速开始) · [技术栈](#技术栈) · [隐私](#隐私) · [文档](#文档) · [贡献](#欢迎-fork)
 
 简体中文 · **[English](README.md)**
 
@@ -28,7 +28,7 @@
 - **长期记忆** — 自动从对话中提炼记忆，跨对话注入相关上下文；也支持手动保存记忆
 - **多 Provider 配置** — 任意 OpenAI-compatible 接口（OpenAI、DeepSeek、Ollama、自建网关……），API Key 存入系统凭据库
 - **项目组织** — 用项目归类对话，项目内对话共享上下文
-- **本地存储** — 所有数据存在本地 SQLite，不上传任何服务器
+- **本地存储** — 对话、项目、记忆都存在本地 SQLite，API Key 存在系统凭据库。聊天内容只会发送给你自己配置的服务商——详见[隐私说明](#隐私)
 - **中英双语** — 界面支持中英文切换，默认英文
 
 ## 截图
@@ -75,20 +75,24 @@ pnpm tauri build
 | 凭据     | 系统凭据库（keyring）                         |
 | 国际化   | 轻量自建 i18n（中/英）                        |
 
+## 隐私
+
+Mira 自己没有任何后端服务，也不会把数据上传到 Mira 服务器。但“本地”并不等于“永不离开本机”：为了获得回复，Mira 会通过你配置的 OpenAI-compatible 服务商发送当前消息、随消息一起发送的对话历史、System Prompt，以及检索到的记忆或项目上下文；后台记忆流程还可能把最近一轮对话发给你配置的后台模型。
+
+这些数据的持久化记录保存在本地 SQLite，但选中的内容可能包含在上述请求中。API Key 存储在系统凭据库，并用于向服务商认证。更新检查和下载还会访问配置的 GitHub updater/release 地址。详见 [docs/security.md](docs/security.md)；本地数据库备份依然包含私人数据。
+
 ## 架构
 
+下图是**当前**架构。完整说明（包括已落地设计和已批准但尚未实现的目标方向）见 [docs/architecture.md](docs/architecture.md)。
+
 ```txt
-React UI
-  ↓ invoke
-Tauri Commands
-  ↓
-Chat Service
-  ↓
-Model Gateway
-  ↓
-Memory Observer / Injection / Cleaner
-  ↓
-SQLite
+React UI / Zustand
+  ↓ invoke / events
+Tauri Commands（Rust 应用协调）
+  ├── Model Gateway → 配置的服务商
+  ├── 记忆提取 / 检索
+  ├── SQLite（持久化用户数据）
+  └── OS keyring（凭据）
 ```
 
 ## 目录结构
@@ -113,10 +117,15 @@ src-tauri/src
 
 ## 文档
 
-- [架构说明](docs/architecture.md)
+- [产品定义](PRODUCT.md) — Mira 是什么、不是什么
+- [架构说明](docs/architecture.md) — 当前设计与目标方向
+- [设计契约](DESIGN.md) — 令牌、布局、无障碍、错误与取消约定
+- [工程与运维](docs/engineering.md) — 构建、CI，以及尚未实现的部分
 - [记忆系统](docs/memory-system.md)
 - [项目上下文](docs/project-context.md)
 - [安全说明](docs/security.md)
+- [架构决策记录（ADR）](docs/adr/)
+- [Agent / 贡献者指南](AGENTS.md)
 
 ## 范围边界
 
