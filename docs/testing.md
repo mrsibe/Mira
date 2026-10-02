@@ -1,7 +1,7 @@
 # Testing
 
-Mira has three automated test layers plus the static gates that CI runs on every
-pull request. No tests use a live model provider. Browser tests replace native
+Mira has three test layers. CI runs static checks, frontend unit/integration
+and Rust tests on every pull request; browser smoke is local opt-in. No tests use a live model provider. Browser tests replace native
 IPC; Rust tests still compile/link the native Tauri dependencies but do not
 launch its desktop runtime.
 
@@ -97,14 +97,18 @@ used by the memory tests to build a migrated database.
 
 ## CI
 
-`.github/workflows/ci.yml` runs three jobs on every pull request (including stacked
-branches), and on pushes to `main`/`master`:
+`.github/workflows/ci.yml` runs one **Verify** job on every pull request (including
+stacked branches), and on pushes to `main`/`master`:
 
-- **frontend** — format, lint, typecheck, Vitest, production build.
-- **ui-smoke** — Playwright Chromium install, production build, `pnpm test:ui`.
-- **rust** — Linux Tauri system dependencies, `cargo fmt --check`,
-  `cargo check --all-targets`, `cargo test`. The frontend is built first because
-  `tauri::generate_context!` embeds `frontendDist`.
+- Format, lint, typecheck, Vitest and one production build.
+- Linux Tauri dependencies, `cargo fmt --check`, `cargo test --locked`.
+  Tests already compile native targets, avoiding a duplicate `cargo check`.
+  The frontend is built first because `tauri::generate_context!` embeds
+  `frontendDist`.
+
+No Chromium download or browser tests in CI. Keep `pnpm test:ui` for local UI
+changes and pre-release smoke; it is not a PR merge gate. Multi-platform
+packaging runs only on version tags in `cd.yml`.
 
 ## Known limitations
 

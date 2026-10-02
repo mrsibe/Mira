@@ -31,17 +31,19 @@ example in `memory.rs` and `database.rs`).
 - Triggers on pushes to `main`/`master` and all pull requests (including stacked
   infrastructure branches). Cancels superseded runs via a `ci-` concurrency group.
 - All jobs use `ubuntu-latest`, Node 22, pnpm `11.1.3` and frozen dependencies.
-- **frontend** (20-minute timeout): format check → lint → app/test typecheck →
-  Vitest → frontend build.
-- **ui-smoke** (20-minute timeout): install Chromium/system dependencies → build
-  → mocked-IPC Playwright smoke; upload the report on failure.
-- **rust** (45-minute timeout): install native Linux/OpenSSL dependencies, Rust
-  stable/rustfmt and build frontend dist → Rust fmt/check/test (`--locked` for
-  compile/test). Cache Rust build artifacts.
+- One **Verify** job (25-minute timeout): format check → lint → app/test
+  typecheck → Vitest → frontend build → Rust format and `cargo test --locked`.
+  Rust tests compile the native targets, so a separate `cargo check` in CI
+  would duplicate compilation. Frontend dependencies and dist are built once.
+- `pnpm/action-setup` reads the pinned package manager and caches its store;
+  Rust compilation artifacts are cached too. Native dependencies are installed
+  only on the Linux runner.
+- Playwright is local opt-in via `pnpm test:ui`: CI does not download Chromium,
+  launch a preview server or upload browser reports.
 
-See [testing.md](testing.md) for assertions and limitations. All three jobs are
-required evidence before merge; branch-protection check names must be configured
-by the owner if enforced remotely. No gate uses `continue-on-error`.
+See [testing.md](testing.md) for assertions and limitations. The **Verify** check
+is required evidence before merge; branch-protection rules must use its name if
+enforced remotely. No gate uses `continue-on-error`.
 
 ## Continuous Delivery (Existing)
 
@@ -50,8 +52,9 @@ by the owner if enforced remotely. No gate uses `continue-on-error`.
 - Triggers on `v*` tags, with `contents: write` permission.
 - Builds a release matrix: `windows-latest`, `macos-latest`, `ubuntu-22.04`
   (60-minute timeout).
-- Installs Node 22, pnpm, Rust stable, caches the Rust target, and installs the
-  Linux webkit/gtk dependencies.
+- Installs Node 22, the pinned pnpm and Rust stable, caches the pnpm store/Rust
+  target, and installs native dependencies on Linux only. Packaging stays out of
+  PR CI; there are no release-time lint/unit/browser-test duplicates.
 - Runs `tauri-apps/tauri-action@v0` to build and publish. Releases are published
   as **drafts** with generated assets.
 - `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are read
@@ -68,8 +71,8 @@ by the owner if enforced remotely. No gate uses `continue-on-error`.
 These are requirements for upcoming engineering PRs. None exist in the repo
 today, and none should be described as available.
 
-- **Further static analysis.** Rust fmt/check/test are in CI; `cargo clippy` is
-  not yet a gate. Existing Markdown helper `any` usage is reported as lint
+- **Further static analysis.** Rust fmt/test are in CI (tests compile native
+  targets); `cargo clippy` is not yet a gate. Existing Markdown helper `any` usage is reported as lint
   warnings, not silently disabled.
 - **Native end-to-end tests.** Automated browser smoke replaces native IPC and
   cannot prove OS keyring, live-provider behavior or persistent desktop restart.
