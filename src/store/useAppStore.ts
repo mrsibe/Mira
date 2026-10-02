@@ -524,7 +524,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    let state = get();
+    const state = get();
     let conversationId = state.activeConversationId;
     let conversationProjectId = state.activeProjectId;
 

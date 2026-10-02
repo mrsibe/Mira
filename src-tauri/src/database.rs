@@ -167,6 +167,13 @@ fn migrate(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Test-only entry point so other modules' tests can build a migrated
+/// in-memory database without exposing `migrate` in production code.
+#[cfg(test)]
+pub(crate) fn migrate_for_tests(conn: &Connection) -> Result<(), String> {
+    migrate(conn)
+}
+
 fn ensure_column(
     conn: &Connection,
     table: &str,
@@ -471,11 +478,8 @@ pub fn delete_project(conn: &Connection, id: &str) -> Result<(), String> {
             params![cid],
         )
         .map_err(|error| format!("Cannot delete messages: {error}"))?;
-        conn.execute(
-            "DELETE FROM conversations WHERE id = ?1",
-            params![cid],
-        )
-        .map_err(|error| format!("Cannot delete conversation: {error}"))?;
+        conn.execute("DELETE FROM conversations WHERE id = ?1", params![cid])
+            .map_err(|error| format!("Cannot delete conversation: {error}"))?;
     }
     conn.execute("DELETE FROM projects WHERE id = ?1", params![id])
         .map_err(|error| format!("Cannot delete project: {error}"))?;
@@ -511,9 +515,9 @@ pub fn project_context_messages(
     limit: i64,
 ) -> Result<Vec<ChatMessage>, String> {
     if let Some(fts_query) = fts_query(query) {
-    let mut statement = conn
-        .prepare(
-            "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, m.reasoning
+        let mut statement = conn
+            .prepare(
+                "SELECT m.id, m.conversation_id, m.role, m.content, m.created_at, m.reasoning
              FROM messages_fts f
                  JOIN messages m ON m.rowid = f.rowid
                  JOIN conversations c ON c.id = m.conversation_id
@@ -592,7 +596,11 @@ pub fn touch_conversation(conn: &Connection, id: &str, title: Option<&str>) -> R
     Ok(())
 }
 
-pub fn rename_conversation(conn: &Connection, id: &str, title: &str) -> Result<Conversation, String> {
+pub fn rename_conversation(
+    conn: &Connection,
+    id: &str,
+    title: &str,
+) -> Result<Conversation, String> {
     let trimmed = title.trim();
     if trimmed.is_empty() {
         return Err("Conversation title cannot be empty".to_string());
@@ -831,9 +839,8 @@ pub fn save_model_config(conn: &Connection, config: ModelConfig) -> Result<Model
 
 pub fn delete_model_config(conn: &Connection, id: &str) -> Result<(), String> {
     let settings = get_model_settings(conn)?;
-    let is_active =
-        settings.chat_model_config_id.as_deref() == Some(id)
-            || settings.background_model_config_id.as_deref() == Some(id);
+    let is_active = settings.chat_model_config_id.as_deref() == Some(id)
+        || settings.background_model_config_id.as_deref() == Some(id);
     if is_active {
         return Err("Cannot delete the active chat or background model".to_string());
     }
@@ -964,7 +971,10 @@ pub fn find_similar_memory(conn: &Connection, fact: &str) -> Result<Option<Memor
     if needle.chars().count() < 6 {
         return Ok(None);
     }
-    let escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    let escaped = needle
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_");
     let like = format!("%{}%", escaped);
     conn.query_row(
         "SELECT id, fact, memory_type, importance, confidence, tags, source_conversation_id,
@@ -1278,5 +1288,163 @@ mod tests {
 
         assert_eq!(memories.len(), 1);
         assert!(memories[0].fact.contains("中文短句"));
+    }
+
+    fn table_columns(conn: &Connection, table: &str) -> Vec<String> {
+        let mut statement = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .expect("pragma should prepare");
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("pragma should query");
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .expect("columns should collect")
+    }
+
+    #[test]
+    fn migration_is_idempotent_and_records_schema_versions() {
+        let conn = memory_test_conn();
+        migrate(&conn).expect("second migration should succeed");
+
+        let schema_version: String = conn
+            .query_row(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("schema version should be recorded");
+        assert_eq!(schema_version, SCHEMA_VERSION);
+
+        let fts_version: String = conn
+            .query_row(
+                "SELECT value FROM schema_meta WHERE key = 'fts_schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("fts schema version should be recorded");
+        assert_eq!(fts_version, FTS_SCHEMA_VERSION);
+
+        assert!(table_columns(&conn, "messages").contains(&"reasoning".to_string()));
+        let fts_columns = table_columns(&conn, "memories_fts");
+        assert!(fts_columns.contains(&"fact".to_string()));
+        assert!(fts_columns.contains(&"tags".to_string()));
+    }
+
+    #[test]
+    fn conversation_lifecycle_round_trips() {
+        let conn = memory_test_conn();
+        let project =
+            create_project(&conn, "Project A".to_string()).expect("project should be created");
+        let conversation =
+            create_conversation(&conn, Some("First".to_string()), Some(project.id.clone()))
+                .expect("conversation should be created");
+        assert_eq!(conversation.title, "First");
+        assert_eq!(
+            conversation.project_id.as_deref(),
+            Some(project.id.as_str())
+        );
+
+        let user = insert_message(&conn, &conversation.id, "user", "hello", None)
+            .expect("user message should insert");
+        let assistant = insert_message(
+            &conn,
+            &conversation.id,
+            "assistant",
+            "hi there",
+            Some("reasoning"),
+        )
+        .expect("assistant message should insert");
+
+        let messages = list_messages(&conn, &conversation.id).expect("messages should list");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].id, user.id);
+        assert_eq!(messages[1].id, assistant.id);
+        assert_eq!(messages[1].reasoning.as_deref(), Some("reasoning"));
+
+        let renamed = rename_conversation(&conn, &conversation.id, "Renamed")
+            .expect("conversation should rename");
+        assert_eq!(renamed.title, "Renamed");
+
+        archive_conversation(&conn, &conversation.id).expect("conversation should archive");
+        assert!(list_conversations(&conn)
+            .expect("active list should work")
+            .is_empty());
+        assert_eq!(
+            list_archived_conversations(&conn)
+                .expect("archived list should work")
+                .len(),
+            1
+        );
+
+        let restored =
+            restore_conversation(&conn, &conversation.id).expect("conversation should restore");
+        assert!(!restored.is_archived);
+
+        let moved = move_conversation_to_project(&conn, &conversation.id, None)
+            .expect("conversation should move");
+        assert!(moved.project_id.is_none());
+
+        delete_conversation(&conn, &conversation.id).expect("conversation should delete");
+        assert!(get_conversation(&conn, &conversation.id)
+            .expect("conversation should load")
+            .is_none());
+    }
+
+    #[test]
+    fn deleting_a_project_removes_its_conversations_and_messages() {
+        let conn = memory_test_conn();
+        let project =
+            create_project(&conn, "Project B".to_string()).expect("project should be created");
+        let conversation = create_conversation(
+            &conn,
+            Some("In project".to_string()),
+            Some(project.id.clone()),
+        )
+        .expect("conversation should be created");
+        insert_message(&conn, &conversation.id, "user", "hello", None)
+            .expect("message should insert");
+
+        delete_project(&conn, &project.id).expect("project should delete");
+
+        assert!(list_projects(&conn)
+            .expect("projects should list")
+            .is_empty());
+        assert!(get_conversation(&conn, &conversation.id)
+            .expect("conversation should load")
+            .is_none());
+        assert!(list_messages(&conn, &conversation.id)
+            .expect("messages should list")
+            .is_empty());
+    }
+
+    #[test]
+    fn empty_rename_inputs_are_rejected() {
+        let conn = memory_test_conn();
+        let project =
+            create_project(&conn, "Project C".to_string()).expect("project should be created");
+        let conversation =
+            create_conversation(&conn, None, None).expect("conversation should be created");
+
+        assert!(rename_project(&conn, &project.id, "   ").is_err());
+        assert!(rename_conversation(&conn, &conversation.id, "").is_err());
+    }
+
+    #[test]
+    fn system_prompt_round_trips() {
+        let conn = memory_test_conn();
+        assert_eq!(get_system_prompt(&conn).expect("prompt should load"), "");
+
+        save_system_prompt(&conn, "  be concise  ").expect("prompt should save");
+        assert_eq!(
+            get_system_prompt(&conn).expect("prompt should load"),
+            "be concise"
+        );
+
+        save_system_prompt(&conn, "   ").expect("prompt should clear");
+        assert_eq!(get_system_prompt(&conn).expect("prompt should load"), "");
+
+        let settings = get_model_settings(&conn).expect("settings should load");
+        assert_eq!(settings.chat_model_config_id, None);
+        assert!(settings.background_model_follows_chat);
     }
 }
