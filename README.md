@@ -6,7 +6,7 @@
 
 ChatGPT-inspired · Local-first · Lightweight · Easy to modify
 
-[Features](#features) · [Why Mira](#why-mira) · [Quick Start](#quick-start) · [Tech Stack](#tech-stack) · [Fork It](#fork-it)
+[Features](#features) · [Why Mira](#why-mira) · [Quick Start](#quick-start) · [Tech Stack](#tech-stack) · [Privacy](#privacy) · [Docs](#docs) · [Fork It](#fork-it)
 
 **[简体中文](README.zh-CN.md)** · English
 
@@ -28,7 +28,7 @@ If you also want a chat app that remembers what you said and belongs to you, for
 - **Long-term memory** — Automatically extracts memories from conversations and injects relevant context across chats; manual saved memories supported too
 - **Multi-provider** — Any OpenAI-compatible endpoint (OpenAI, DeepSeek, Ollama, self-hosted gateways…). API keys stored in the OS credential vault
 - **Projects** — Group conversations into projects; conversations in a project share context
-- **Local storage** — All data stays in a local SQLite file. Nothing leaves your machine
+- **Local storage** — Conversations, projects, and memory stay in a local SQLite file; API keys live in the OS credential vault. Chat content is sent only to the provider you configure — see [Privacy](#privacy)
 - **i18n** — English / Chinese UI, English by default
 
 ## Screenshot
@@ -76,20 +76,35 @@ Output lands in `src-tauri/target/release/bundle/`.
 | Credentials | OS keyring                                    |
 | i18n        | Lightweight built-in (en / zh)                |
 
+## Privacy
+
+Mira runs no backend of its own and uploads nothing to a Mira server. But
+"local" does not mean "never leaves the machine": to get a reply, Mira sends
+the current message, the conversation history sent with it, the system prompt,
+and any retrieved memory or project context over the network to the
+OpenAI-compatible provider you configured. A background memory pass may also
+send the latest turn to your configured background model.
+
+The durable records stay in local SQLite; selected content can be included in
+those requests. API keys are stored in the OS credential vault and used to
+authenticate provider requests. Update checks/downloads also contact the
+configured GitHub updater/release endpoints. See [docs/security.md](docs/security.md)
+for details; local database backups still contain private user data.
+
 ## Architecture
 
+The diagram below is the **current** architecture. See
+[docs/architecture.md](docs/architecture.md) for the canonical description of
+the shipped design and the approved (not-yet-implemented) target direction.
+
 ```txt
-React UI
-  ↓ invoke
-Tauri Commands
-  ↓
-Chat Service
-  ↓
-Model Gateway
-  ↓
-Memory Observer / Injection / Cleaner
-  ↓
-SQLite
+React UI / Zustand
+  ↓ invoke / events
+Tauri Commands (Rust application coordination)
+  ├── Model Gateway → configured provider
+  ├── Memory extraction / retrieval
+  ├── SQLite (persistent user data)
+  └── OS keyring (credentials)
 ```
 
 ## Project Structure
@@ -114,10 +129,15 @@ src-tauri/src
 
 ## Docs
 
-- [Architecture](docs/architecture.md)
+- [Product Definition](PRODUCT.md) — what Mira is and is not
+- [Architecture](docs/architecture.md) — current design and target direction
+- [Design Contract](DESIGN.md) — tokens, layout, accessibility, error, and cancellation
+- [Engineering & Ops](docs/engineering.md) — build, CI, and what is still planned
 - [Memory System](docs/memory-system.md)
 - [Project Context](docs/project-context.md)
 - [Security](docs/security.md)
+- [Architecture Decision Records](docs/adr/)
+- [Agent / Contributor Guide](AGENTS.md)
 
 ## Scope
 
