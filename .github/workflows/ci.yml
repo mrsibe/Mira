@@ -13,11 +13,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Verify
+  # Reusable Rust packages at their declared MSRV (1.88). This job deliberately
+  # installs no Node and builds no Tauri target: the desktop is checked by the
+  # Verify job below.
+  sdk:
+    name: SDK (Rust 1.88)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - uses: actions/checkout@v5
+
+      # An explicit `toolchain` input uses @master; the @stable ref only tracks
+      # the moving stable channel.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      # Default members are the reusable packages, so this never builds Tauri.
+      - name: MSRV tests (reusable packages)
+        run: cargo test --locked
+
+      - name: MSRV clippy (reusable packages)
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Workspace formatting
+        run: cargo fmt --all -- --check
+
+      # Consumers can depend on the portable protocol without the HTTP transport.
+      - name: Protocol-only tests (mira-ai without default features)
+        run: cargo test -p mira-ai --no-default-features --locked
+
+      - name: Runtime offline example
+        run: cargo run -p mira-runtime --example offline_session --locked
+
+  verify:
+    name: Verify
+    needs: sdk
+    # A skipped required job can count as passing. Run and fail closed instead.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require successful SDK validation
+        env:
+          SDK_RESULT: ${{ needs.sdk.result }}
+        run: |
+          if [ "$SDK_RESULT" != "success" ]; then
+            echo "SDK validation did not succeed ($SDK_RESULT)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -32,6 +82,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Root scripts forward to @mira/desktop; `pnpm build` also writes
+      # apps/mira-desktop/dist, which the native build context reads below.
       - name: Frontend checks
         run: |
           pnpm format:check
@@ -46,7 +98,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: . -> target
 
       - name: Install native build dependencies
         run: |
@@ -55,10 +107,11 @@ jobs:
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev patchelf libssl-dev
 
-      # cargo test compiles the library, binary and tests; a separate check
-      # would repeat that work. The frontend dist was already built above.
+      # The workspace default members are the reusable packages, so `-p mira`
+      # selects the desktop explicitly. --all-targets compiles its library,
+      # binary and tests; a separate `cargo check` would repeat that work. The
+      # frontend dist was already built above.
       - name: Rust checks
-        working-directory: src-tauri
         run: |
-          cargo fmt --check
-          cargo test --locked
+          cargo fmt --all -- --check
+          cargo test -p mira --all-targets --locked

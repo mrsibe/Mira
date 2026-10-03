@@ -1,0 +1,34 @@
+[package]
+name = "mira-runtime"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Operational sessions, an explicit model registry and caller-owned context composition for Mira"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/MrSibe/Mira"
+keywords = ["llm", "session", "agent", "runtime"]
+categories = ["api-bindings"]
+
+[dependencies]
+# Both lower packages are used with `default-features = false`, so consuming this crate never
+# pulls the `mira-ai` HTTP transport, `reqwest` or TLS.
+mira-ai = { version = "0.1.0", path = "../mira-ai", default-features = false }
+mira-agent = { version = "0.1.0", path = "../mira-agent", default-features = false }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", features = [
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "sync",
+  "test-util",
+  "time",
+] }
+
+[package.metadata.docs.rs]
+all-features = true

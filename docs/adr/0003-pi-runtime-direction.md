@@ -1,6 +1,6 @@
 # ADR 0003: Target the UI → Mira App Core → Pi Runtime Split
 
-- **Status:** Accepted (implementation pending)
+- **Status:** Accepted; runtime dependency superseded by [ADR 0006](0006-rust-native-runtime.md)
 - **Date:** 2026-10-02
 
 ## Context
@@ -59,7 +59,9 @@ integration ADR and tests; this decision does not enable autonomous tools.
 
 ## Status Note
 
-This is a direction, not a design. No Pi implementation exists in this
-repository, and no IPC commands, message schemas, process model, or integration
-protocol are defined here. Any implementation work must produce its own design
-before it can be considered approved.
+This historical ADR records the direction agreed on 2026-10-02. Its TypeScript
+Pi dependency is superseded by the independent Rust packages in
+[ADR 0006](0006-rust-native-runtime.md); the data-ownership boundaries remain.
+See [architecture.md](../architecture.md) for the implemented SDK and desktop
+adapter. The separate Application API / App Core presentation split remains
+planned, not an API defined by this ADR.

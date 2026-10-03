@@ -62,7 +62,7 @@ pnpm install
 pnpm tauri build
 ```
 
-构建产物在 `src-tauri/target/release/bundle/`。
+从仓库根目录运行上述命令。构建产物在 `target/release/bundle/`；桌面应用源码位于 `apps/mira-desktop`。
 
 ## 技术栈
 
@@ -70,7 +70,7 @@ pnpm tauri build
 | -------- | --------------------------------------------- |
 | 前端     | React 19 · TypeScript · TailwindCSS · Zustand |
 | 桌面框架 | Tauri 2                                       |
-| 后端     | Rust · OpenAI-compatible HTTP 模型网关        |
+| 后端     | Rust · mira-runtime → mira-agent → mira-ai    |
 | 存储     | SQLite（本地文件）                            |
 | 凭据     | 系统凭据库（keyring）                         |
 | 国际化   | 轻量自建 i18n（中/英）                        |
@@ -83,13 +83,13 @@ Mira 自己没有任何后端服务，也不会把数据上传到 Mira 服务器
 
 ## 架构
 
-下图是**当前**架构。完整说明（包括已落地设计和已批准但尚未实现的目标方向）见 [docs/architecture.md](docs/architecture.md)。
+下图是**当前**架构。Rust SDK 和桌面推理接入已实现；后续 App Core/UI 分层见 [docs/architecture.md](docs/architecture.md)。
 
 ```txt
 React UI / Zustand
   ↓ invoke / events
 Tauri Commands（Rust 应用协调）
-  ├── Model Gateway → 配置的服务商
+  ├── mira-runtime → mira-agent → mira-ai → 配置的服务商
   ├── 记忆提取 / 检索
   ├── SQLite（持久化用户数据）
   └── OS keyring（凭据）
@@ -98,21 +98,38 @@ Tauri Commands（Rust 应用协调）
 ## 目录结构
 
 ```txt
-src
-├── components      # UI 组件
-├── pages           # 聊天页 / 设置页
-├── store           # Zustand 状态管理
-├── core            # Tauri 客户端 & 类型
-├── i18n            # 国际化（en / zh）
-└── utils           # 工具函数
+crates/
+├── mira-ai         # 可移植协议与可选的 OpenAI-compatible 传输
+├── mira-agent      # Agent 状态与有界、经校验的工具执行
+└── mira-runtime    # Session、显式模型注册与上下文注入
 
-src-tauri/src
-├── chat.rs         # Tauri 命令入口
-├── database.rs     # SQLite 数据层
-├── memory.rs       # 记忆提炼 & 注入
-├── model.rs        # OpenAI-compatible 模型网关
-├── secrets.rs      # 系统凭据库读写
-└── types.rs        # 共享类型
+apps/mira-desktop/
+├── src             # React UI、Zustand、IPC 客户端与 i18n
+├── tests           # Vitest 单元 / 集成测试
+├── public          # 字体与静态资源
+└── src-tauri/src
+    ├── chat.rs         # Tauri 应用命令
+    ├── inference.rs    # 桌面提示词与 Runtime 适配器
+    ├── database.rs     # SQLite 数据层
+    ├── memory.rs       # 记忆策略与 planner 回退
+    ├── cancellation.rs # 按请求归属的取消信号
+    ├── secrets.rs      # 系统凭据库读写
+    └── types.rs        # 桌面 IPC 类型
+```
+
+## 可独立使用的 Rust SDK
+
+Mira Desktop 是三个 MIT 库的消费者，库要求 Rust 1.88+：
+
+- [mira-ai](crates/mira-ai/README.md)：与服务商无关的消息 / 流协议，以及可选的 OpenAI-compatible HTTP 传输。
+- [mira-agent](crates/mira-agent/README.md)：Agent 状态、经校验的顺序工具执行与有界、可取消的运行。
+- [mira-runtime](crates/mira-runtime/README.md)：Session、不可变模型注册，以及由调用方提供的凭据和上下文。
+
+Agent / Runtime 不自动启用 HTTP。所有库均不依赖 Tauri、SQLite 或 keyring；持久化和应用策略由消费者负责。库已实现并在本地验证，尚未发布到包注册表。
+
+```bash
+cargo +1.88.0 test --locked
+cargo +1.88.0 run -p mira-runtime --example offline_session --locked
 ```
 
 ## 文档
@@ -121,7 +138,7 @@ src-tauri/src
 - [架构说明](docs/architecture.md) — 当前设计与目标方向
 - [设计契约](DESIGN.md) — 令牌、布局、无障碍、错误与取消约定
 - [工程与运维](docs/engineering.md) — 构建、CI，以及尚未实现的部分
-- [测试说明](docs/testing.md) — 单元、SQLite 集成和 mock UI smoke
+- [测试说明](docs/testing.md) — 离线 SDK、SQLite 和 mock IPC 测试
 - [记忆系统](docs/memory-system.md)
 - [项目上下文](docs/project-context.md)
 - [安全说明](docs/security.md)
@@ -132,7 +149,7 @@ src-tauri/src
 
 v1 只做本机单用户、纯聊天、长期记忆、SQLite 本地存储、多 Provider 配置。
 
-**不做：** RAG、向量数据库、工具调用、多用户、云同步。
+**Mira Desktop 不做：** RAG、向量数据库、工具调用、多用户、云同步。SDK 的可移植工具能力不会启用桌面端工具。
 
 ## 欢迎 fork
 
@@ -147,4 +164,4 @@ PR 欢迎，但请先开 issue 讨论改动方向。
 
 ## License
 
-[GPL-3.0](LICENSE)
+[MIT](LICENSE)

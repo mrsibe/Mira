@@ -1,0 +1,9 @@
+# Rust workspace for the Mira desktop app and the reusable Mira packages.
+#
+# `default-members` keeps root-level cargo commands (for example `cargo test` or
+# `cargo clippy`) focused on the reusable packages; build the desktop app
+# explicitly with `-p mira`. See docs/adr/0006-rust-native-runtime.md.
+[workspace]
+resolver = "2"
+members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime", "apps/mira-desktop/src-tauri"]
+default-members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime"]

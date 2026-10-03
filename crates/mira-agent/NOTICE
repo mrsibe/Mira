@@ -1,0 +1,49 @@
+mira-agent — third-party notices
+================================
+
+This crate is a Rust translation of parts of the Pi agent package
+(`@earendil-works/pi-agent-core`, `packages/agent`) and of the tool-argument
+validation entry point in the Pi AI package, from the Pi repository, reference
+commit `a276dabe5`. The translated design and algorithms come from:
+
+- `packages/agent/src/types.ts`
+- `packages/agent/src/agent.ts`
+- `packages/agent/src/agent-loop.ts`
+- `packages/agent/test/agent-loop.test.ts` (selected offline cases)
+- `packages/ai/src/utils/validation.ts` (tool argument validation)
+
+The crate is not a line-by-line port: it keeps the important invariants and
+replaces the JavaScript mechanics with Rust ownership, bounded event delivery,
+injected providers, explicit cancellation and explicit error categories. The
+intentional differences, including everything that is deliberately not
+translated, are listed in README.md. No durable state is provided.
+
+Pi is MIT licensed. The following notice is reproduced as required:
+
+MIT License
+
+Copyright (c) 2025 Mario Zechner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Other dependencies keep their own licenses; see `cargo license` output or each
+crate's manifest. Tool argument validation uses the `jsonschema` crate (MIT)
+in its offline configuration: no HTTP, file or TLS features are enabled, so
+schema compilation and validation never resolve a reference over the network
+or the filesystem. Nothing in this notice relicenses a dependency.

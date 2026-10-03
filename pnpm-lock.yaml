@@ -7,6 +7,33 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      '@eslint/js':
+        specifier: 9.39.5
+        version: 9.39.5
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5(jiti@2.7.0)
+      eslint-plugin-react-hooks:
+        specifier: 5.2.0
+        version: 5.2.0(eslint@9.39.5(jiti@2.7.0))
+      eslint-plugin-react-refresh:
+        specifier: 0.4.26
+        version: 0.4.26(eslint@9.39.5(jiti@2.7.0))
+      globals:
+        specifier: 16.5.0
+        version: 16.5.0
+      prettier:
+        specifier: ^3.8.4
+        version: 3.8.4
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+      typescript-eslint:
+        specifier: 8.71.0
+        version: 8.71.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.8.3)
+
+  apps/mira-desktop:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2
@@ -28,7 +55,7 @@ importers:
         version: 2.1.1
       geist:
         specifier: 1.7.2
-        version: 1.7.2(next@16.2.10(@babel/core@7.29.7)(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
+        version: 1.7.2(next@16.2.10(@babel/core@7.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
       lucide-react:
         specifier: ^0.525.0
         version: 0.525.0(react@19.2.7)
@@ -54,12 +81,6 @@ importers:
         specifier: ^5.0.6
         version: 5.0.14(@types/react@19.3.0)(react@19.2.7)
     devDependencies:
-      '@eslint/js':
-        specifier: 9.39.5
-        version: 9.39.5
-      '@playwright/test':
-        specifier: 1.63.0
-        version: 1.63.0
       '@tailwindcss/postcss':
         specifier: ^4.1.11
         version: 4.3.0
@@ -81,36 +102,18 @@ importers:
       autoprefixer:
         specifier: ^10.4.21
         version: 10.5.0(postcss@8.5.15)
-      eslint:
-        specifier: 9.39.5
-        version: 9.39.5(jiti@2.7.0)
-      eslint-plugin-react-hooks:
-        specifier: 5.2.0
-        version: 5.2.0(eslint@9.39.5(jiti@2.7.0))
-      eslint-plugin-react-refresh:
-        specifier: 0.4.26
-        version: 0.4.26(eslint@9.39.5(jiti@2.7.0))
-      globals:
-        specifier: 16.5.0
-        version: 16.5.0
       jsdom:
         specifier: 26.1.0
         version: 26.1.0
       postcss:
         specifier: ^8.5.6
         version: 8.5.15
-      prettier:
-        specifier: ^3.8.4
-        version: 3.8.4
       tailwindcss:
         specifier: ^4.1.11
         version: 4.3.0
       typescript:
         specifier: ~5.8.3
         version: 5.8.3
-      typescript-eslint:
-        specifier: 8.71.0
-        version: 8.71.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.8.3)
       vite:
         specifier: ^7.0.4
         version: 7.3.5(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)
@@ -694,11 +697,6 @@ packages:
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
-
-  '@playwright/test@1.63.0':
-    resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
-    engines: {node: '>=20'}
-    hasBin: true
 
   '@rolldown/pluginutils@1.0.0-beta.19':
     resolution: {integrity: sha512-3FL3mnMbPu0muGOCaKAhhFEYmqv9eTfPSJRJmANrCwtgK8VuxpsZDGK+m0LYAGoyO8+0j5uRe4PeyPDK1yA/hA==}
@@ -2054,16 +2052,6 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
-  playwright-core@1.63.0:
-    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
-    engines: {node: '>=20'}
-    hasBin: true
-
-  playwright@1.63.0:
-    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   postcss-value-parser@4.2.0:
     resolution: {integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==}
 
@@ -2976,10 +2964,6 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@playwright/test@1.63.0':
-    dependencies:
-      playwright: 1.63.0
-
   '@rolldown/pluginutils@1.0.0-beta.19': {}
 
   '@rollup/rollup-android-arm-eabi@4.61.1':
@@ -3753,9 +3737,9 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  geist@1.7.2(next@16.2.10(@babel/core@7.29.7)(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
+  geist@1.7.2(next@16.2.10(@babel/core@7.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)):
     dependencies:
-      next: 16.2.10(@babel/core@7.29.7)(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      next: 16.2.10(@babel/core@7.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
   gensync@1.0.0-beta.2: {}
 
@@ -4387,7 +4371,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@16.2.10(@babel/core@7.29.7)(@playwright/test@1.63.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  next@16.2.10(@babel/core@7.29.7)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       '@next/env': 16.2.10
       '@swc/helpers': 0.5.15
@@ -4406,7 +4390,6 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.2.10
       '@next/swc-win32-arm64-msvc': 16.2.10
       '@next/swc-win32-x64-msvc': 16.2.10
-      '@playwright/test': 1.63.0
       sharp: 0.34.5
     transitivePeerDependencies:
       - '@babel/core'
@@ -4471,12 +4454,6 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.4: {}
-
-  playwright-core@1.63.0: {}
-
-  playwright@1.63.0:
-    dependencies:
-      playwright-core: 1.63.0
 
   postcss-value-parser@4.2.0: {}
 

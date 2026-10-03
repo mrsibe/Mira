@@ -47,7 +47,7 @@ jobs:
       - name: Cache Rust target
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: . -> target
 
       - name: Install Linux deps
         if: matrix.platform == 'ubuntu-22.04'
@@ -70,3 +70,4 @@ jobs:
           releaseBody: "See the assets below to download this version."
           releaseDraft: true
           prerelease: false
+          projectPath: apps/mira-desktop

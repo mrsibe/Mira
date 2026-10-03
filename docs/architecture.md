@@ -1,38 +1,39 @@
 # Mira Architecture
 
 Mira is a local-first ChatGPT-style desktop client. This is the canonical
-architecture document. It has two clearly separated parts:
-
-- **Current architecture (as shipped)** — what the code in this repository
-  actually does today.
-- **Approved target architecture (not yet implemented)** — the agreed direction
-  for a future app-core/runtime split. No part of this is built yet, and no IPC
-  or protocol design is fixed here.
+architecture document. It distinguishes the current implementation from the
+remaining Application API / App Core presentation split. The independently
+usable Rust AI/Agent/Runtime packages and desktop inference integration are
+implemented and reviewed; see [ADR 0006](adr/0006-rust-native-runtime.md).
+This describes repository code, not a published release.
 
 Product boundaries are defined in [../PRODUCT.md](../PRODUCT.md); the UI
 contract is in [../DESIGN.md](../DESIGN.md).
 
-## Current Architecture (As Shipped)
+## Current Architecture (Implemented)
 
 ```txt
 React UI (presentation)
   │  invoke commands / listen to events
   ▼
-Tauri 2 desktop shell (src-tauri, Rust)
+Tauri 2 desktop shell (apps/mira-desktop/src-tauri, Rust)
   │
   ├── chat.rs        Tauri commands: send_message, conversations, projects,
   │                  memories, model configs, system prompt, cleanup
-  ├── model.rs       OpenAI-compatible chat completions gateway (SSE streaming)
+  ├── inference.rs   application prompts and SDK event/error adapter
+  │                    └── mira-runtime → mira-agent → mira-ai → provider
   ├── memory.rs      memory planner, retrieval, cleanup, sensitive filtering
   ├── secrets.rs     OS credential store access
   ├── database.rs    SQLite schema, migrations, queries, FTS5 indexes
-  └── cancellation.rs cancel flag for the in-flight stream
+  └── cancellation.rs attempt-owned runtime cancellation token
   ├── Local durable state: SQLite file
   ├── Credentials: OS keyring
-  └── Network (model.rs): user-configured OpenAI-compatible provider
+  └── Network (mira-ai): user-configured OpenAI-compatible provider
 ```
 
 ### Frontend (Presentation)
+
+All frontend paths in this section are relative to `apps/mira-desktop/`.
 
 - React 19 + TypeScript + Tailwind CSS v4 + Zustand, built with Vite.
 - `src/components` — app shell, sidebar/conversation list, composer, message
@@ -52,34 +53,49 @@ that the current store is already presentation-only.
 ### Desktop Shell And IPC
 
 - Tauri 2 hosts the webview and the Rust backend. Commands are registered in
-  `src-tauri/src/lib.rs`.
-- The webview calls commands through `invoke` (see `src/core/tauriClient.ts`).
+  `apps/mira-desktop/src-tauri/src/lib.rs`.
+- The webview calls commands through `invoke` (see
+  `apps/mira-desktop/src/core/tauriClient.ts`).
 - The backend pushes updates back to the webview as events:
   - `message_stream_delta` — streaming assistant content and reasoning deltas.
   - `memories_changed` — emitted after a background memory pass writes facts.
 
 ### Backend Modules
 
-| Module            | Responsibility                                                               |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `chat.rs`         | Tauri command handlers for chat, conversations, projects, memories, settings |
-| `model.rs`        | OpenAI-compatible gateway: request build, retries, SSE stream parse          |
-| `memory.rs`       | Memory planner, retrieval, cleanup, sensitive-content filtering              |
-| `database.rs`     | SQLite schema, migrations, queries, FTS5 trigram indexes                     |
-| `secrets.rs`      | Read/write/delete API keys in the OS credential store                        |
-| `cancellation.rs` | Process-wide cancel flag for the active stream                               |
-| `types.rs`        | Shared Rust types serialized to the frontend                                 |
+| Module            | Responsibility                                                                   |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `chat.rs`         | Tauri command handlers for chat, conversations, projects, memories, settings     |
+| `inference.rs`    | Desktop prompt/history/compatibility policies and Runtime event/error mapping    |
+| `memory.rs`       | Memory planner, retrieval, cleanup, sensitive-content filtering                  |
+| `database.rs`     | SQLite schema, migrations, queries, FTS5 trigram indexes                         |
+| `secrets.rs`      | Read/write/delete API keys in the OS credential store                            |
+| `cancellation.rs` | Foreground attempt identity, latched cancellation and runtime token registration |
+| `types.rs`        | Shared Rust types serialized to the frontend                                     |
 
 ### Model Gateway
 
-- Requests target `{base_url}/chat/completions` with bearer auth and
-  `stream: true`.
-- The response is consumed as an SSE byte stream and parsed incrementally; text
-  and reasoning deltas are forwarded to the UI through `message_stream_delta`.
-- Failed sends are retried up to 3 attempts for connection/timeout errors and
-  for HTTP `429` / `5xx` responses, with a short backoff. Connect timeout is 15s
-  and response-header timeout is 45s.
-- Model HTTP requests are made from Rust (`reqwest`), not from the webview.
+- Both chat and background memory use per-run `mira-runtime` sessions. The
+  desktop supplies already assembled prompts, explicit credentials and no tools.
+  Sessions are operational only; SQLite remains canonical.
+- `mira-ai` sends `{base_url}/chat/completions` with bearer auth and `stream: true`
+  using Rust `reqwest` with rustls. Labels never select another provider API.
+- The adapter preserves the Chinese system prompt, project/memory formatting,
+  last-20-message window and text-only historical assistant replay. DeepSeek
+  reasoner/v4 chat models retain thinking/high; memory uses temperature `0.0`
+  without reasoning. `stream_options` is omitted for existing endpoint parity.
+- Text and reasoning deltas stay separate in `message_stream_delta`. Tool-call
+  argument deltas are not displayed. Terminal outcomes, not EOF, determine
+  success; nonempty truncated answers remain valid.
+- Connect timeout is 15s, response-header timeout 45s, with at most three setup
+  attempts and a finite 300s run budget. Retry/cooldown and SSE bounds are owned
+  by AI; provider prose is replaced by safe error categories.
+- Foreground cancellation is push-driven, including header/body/retry waits.
+  Attempt identity prevents stale registration from stealing a successor's
+  cancellation. Cancelled turns retain the saved user but persist no partial
+  assistant and schedule no memory pass. Background sessions are independent.
+- Background planning now collects SSE instead of a nonstreaming response.
+  Malformed SSE fails safely instead of being silently skipped; incompatible
+  planner endpoints use the existing heuristic fallback.
 
 ### Memory
 
@@ -129,7 +145,30 @@ that the current store is already presentation-only.
 - Project context is retrieved by relevance for the current message instead of
   blindly injecting recent project messages.
 
-## Approved Target Architecture (Not Implemented)
+## Reusable Packages (Implemented And Used By Desktop)
+
+The root Cargo workspace defaults to the three library packages, so library
+consumers and tests do not build Tauri:
+
+- `crates/mira-ai` — portable messages, provider and bounded stream contracts;
+  an optional OpenAI-compatible HTTP transport with offline loopback fixtures.
+- `crates/mira-agent` — one operational transcript, bounded sequential tool
+  execution, validated arguments, request transforms and cancellation repair.
+- `crates/mira-runtime` — sessions, immutable explicit model bindings,
+  caller-owned credential resolution and context providers. Context composition
+  preserves canonical history and budgets all injected Unicode characters;
+  usage belongs to each session, even when context providers are shared.
+
+Agent and Runtime disable AI's default HTTP feature. They accept an injected
+provider and have no Tauri, SQLite or keyring dependency. Each package contains
+its own README, offline tests/example, MIT license and Pi attribution notice.
+All three packages passed offline checks and independent acceptance reviews.
+The desktop's chat and memory paths both consume these packages. Their public
+APIs do not depend on application prompts, database entities or native services.
+The desktop lives in `apps/mira-desktop`; library package metadata supports
+independent consumers, but publication has not been performed.
+
+## Remaining Target: Application API / App Core Split
 
 The agreed direction separates presentation, app logic, inference, and native
 capabilities into distinct layers:
@@ -139,7 +178,7 @@ Mira UI (React / Zustand presentation)
   │ Application API
   ▼
 Mira App Core (conversation, project, memory, settings)
-  ├── Pi Runtime (inference, sessions, model/provider adapter)
+  ├── mira-runtime → mira-agent → mira-ai (independent Rust packages)
   └── Native services (SQLite, keyring, filesystem, OS integration)
 ```
 
@@ -149,7 +188,7 @@ Layer responsibilities and hard boundaries:
   holds no durable state and owns no inference or session logic.
 - **Mira App Core** is the application layer. It coordinates the UI, the
   runtime, and durable storage, and it owns the app's business rules.
-- **Pi Runtime** owns inference and session handling. It is **not** the durable
+- **Rust runtime packages** own inference and session handling. They are **not** the durable
   source of truth: session and inference state are operational, not the
   canonical record.
 - **Native services** provide desktop capabilities (window chrome, updater,
@@ -160,20 +199,24 @@ Layer responsibilities and hard boundaries:
 - **Dependency direction:** UI → Application API → App Core. App Core uses
   separate runtime and native-service adapters; native persistence is not a
   downstream stage of the model loop. UI must not access SQLite or providers
-  directly, Pi must not own Mira's canonical persistence, and Tauri must not
+  directly, runtime packages must not own Mira's canonical persistence, and Tauri must not
   become the future agent orchestration layer.
-- **Pi reuse scope:** evaluate `pi-ai` → `pi-agent-core` → AgentSession APIs and
-  the extension/skill ecosystem behind Mira's runtime adapter. Dependencies,
-  versions, desktop packaging, permissions, cancellation and events require
-  a separate integration design. Reusing that ecosystem does not authorize
-  tools, file editing or autonomous workflows in the product.
+- **Pi reference scope:** translate selected AI and Agent contracts and offline
+  tests into idiomatic Rust, preserving attribution. Do not depend on Pi's
+  TypeScript runtime, CLI, extensions or coding tools. Generic tool execution
+  in the library does not enable tools or autonomous workflows in Mira Desktop.
+- **Package isolation:** lower layers know no desktop entities, database schema,
+  keyring service names or application prompts. Context and credentials are
+  supplied explicitly by the consumer.
 
-This section intentionally stops at layer responsibilities. No IPC commands,
-message schemas, process model, or Pi integration design are defined here; that
-design is pending implementation. Any future work in this direction must not
-assume details recorded in this document.
+[ADR 0006](adr/0006-rust-native-runtime.md) records the approved package design,
+phased migration and validation contract. Library implementation and desktop
+inference integration are complete. The separate Application API / App Core
+presentation boundary shown above is still a target, not an implemented API.
 
 ## Frontend Structure Reference
+
+Paths below are relative to `apps/mira-desktop/`.
 
 - `src/components` contains shared app UI such as the shell, sidebar, composer,
   and message renderer.
