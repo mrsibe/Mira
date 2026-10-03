@@ -1,0 +1,37 @@
+[package]
+name = "mira-agent"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Agent state, a bounded sequential tool loop and immutable run events for Mira"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/MrSibe/Mira"
+keywords = ["llm", "agent", "tool-calling", "streaming"]
+categories = ["api-bindings"]
+
+[dependencies]
+# Protocol types, the stream protocol and the `Provider` seam only: no HTTP transport, so a
+# consumer of this crate never pulls `reqwest` through `mira-ai`.
+mira-ai = { version = "0.1.0", path = "../mira-ai", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# JSON Schema validation for tool arguments. Default features (HTTP/file retrieval, TLS, IDNA)
+# are off so compilation and validation never perform network or filesystem I/O.
+jsonschema = { version = "0.58", default-features = false }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = [
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "sync",
+  "test-util",
+  "time",
+] }
+
+[package.metadata.docs.rs]
+all-features = true

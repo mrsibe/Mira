@@ -5,7 +5,8 @@ reference into a contract covering tokens, layout, interaction states,
 accessibility, errors, and cancellation. Implementation notes describe current
 code; design requirements guide future changes and are not claims of full
 compliance. See `src/index.css`, `src/components/*`, and `src/pages/*` for the
-source of truth.
+source of truth. Source paths beginning with `src/` or `public/` in this
+contract are relative to `apps/mira-desktop/`.
 
 `docs/design.md` is kept only as a compatibility pointer to this file.
 
@@ -245,9 +246,11 @@ PR. Full contrast, IME and reduced-motion compliance is not verified here.
   `errors.sendFailed` with the raw error text.
 - Errors are shown in-place in the conversation; the user can keep chatting
   without reloading.
-- Current code surfaces raw backend errors for diagnosis. Future changes should
-  show actionable, localized errors without keys, authorization headers or
-  private request content; raw provider error bodies are not a safe logging API.
+- Provider/runtime failures are mapped to safe Chinese categories by the
+  desktop inference adapter; provider prose, URLs and credentials are not
+  surfaced. Other application errors still use backend strings. Further
+  localization and a bounded diagnostic sink remain future work; raw provider
+  bodies are not a safe logging API.
 
 ## Cancellation Contract
 
@@ -255,9 +258,11 @@ PR. Full contrast, IME and reduced-motion compliance is not verified here.
   danger styling, `title="Stop generating"`).
 - Pressing stop calls `requestCancel()`, which flags `cancelRequested` and
   invokes the backend `cancel_message` command.
-- The Rust backend sets a cancellation flag checked inside the streaming loop.
-  On the next chunk, it flushes buffered output and returns a `__CANCELLED__`
-  sentinel instead of an error.
+- The Rust backend cancels the foreground runtime token directly, including
+  stalled header/body reads and retry waits, then returns the `__CANCELLED__`
+  sentinel. Attempt identity prevents an old request from registering over a
+  successor's cancellation slot. Buffered provider output is not flushed after
+  cancellation.
 - The store treats `cancelRequested` or `__CANCELLED__` as a quiet stop: it
   clears `isSending` and stops appending deltas. Text already rendered stays on
   screen as the local `streaming-<requestId>` message; it is not a persisted
@@ -265,12 +270,10 @@ PR. Full contrast, IME and reduced-motion compliance is not verified here.
 - The backend writes no assistant message for a cancelled turn (it returns
   `assistant_message: null`), so the partial reply is not durable and is not
   reloaded from storage later.
-- Cancellation is intended to be a quiet stop rather than an assistant error.
-  Current `requestCancel()` sets a flag but keeps `isSending` true until the
-  request settles. Rust checks the flag only after `stream.next()` yields;
-  cancellation cannot yet interrupt a stalled stream or response-header wait.
-  Immediate transport cancellation and immediate re-send are target behaviors,
-  not guarantees of the current implementation.
+- Cancellation is a quiet stop rather than an assistant error. The frontend
+  still keeps `isSending` true until the request settles; immediate re-send is
+  not implemented. Transport cancellation no longer depends on a new byte
+  arriving. Background memory sessions are independent from foreground stop.
 
 ## Compatibility Pointer
 

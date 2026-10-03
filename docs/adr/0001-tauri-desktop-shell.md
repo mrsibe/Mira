@@ -15,8 +15,8 @@ Electron would ship a large runtime for a small app.
 Build Mira as a Tauri 2 desktop application:
 
 - React 19 + TypeScript + Tailwind CSS + Zustand for the presentation layer.
-- A Rust backend in `src-tauri` for commands, networking, storage, and
-  credentials.
+- A Rust backend for commands, networking, storage, and credentials (originally
+  `src-tauri`, now `apps/mira-desktop/src-tauri` under ADR 0006).
 - The frontend calls the backend through Tauri `invoke`, and the backend pushes
   streaming updates back as events.
 

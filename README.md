@@ -63,7 +63,8 @@ pnpm install
 pnpm tauri build
 ```
 
-Output lands in `src-tauri/target/release/bundle/`.
+Run these commands from the repository root. Output lands in
+`target/release/bundle/`; the desktop source lives in `apps/mira-desktop`.
 
 ## Tech Stack
 
@@ -71,7 +72,7 @@ Output lands in `src-tauri/target/release/bundle/`.
 | ----------- | --------------------------------------------- |
 | Frontend    | React 19 · TypeScript · TailwindCSS · Zustand |
 | Desktop     | Tauri 2                                       |
-| Backend     | Rust · OpenAI-compatible HTTP model gateway   |
+| Backend     | Rust · mira-runtime → mira-agent → mira-ai    |
 | Storage     | SQLite (local file)                           |
 | Credentials | OS keyring                                    |
 | i18n        | Lightweight built-in (en / zh)                |
@@ -95,13 +96,13 @@ for details; local database backups still contain private user data.
 
 The diagram below is the **current** architecture. See
 [docs/architecture.md](docs/architecture.md) for the canonical description of
-the shipped design and the approved (not-yet-implemented) target direction.
+the implemented Rust SDK integration and the remaining App Core/UI split.
 
 ```txt
 React UI / Zustand
   ↓ invoke / events
 Tauri Commands (Rust application coordination)
-  ├── Model Gateway → configured provider
+  ├── mira-runtime → mira-agent → mira-ai → configured provider
   ├── Memory extraction / retrieval
   ├── SQLite (persistent user data)
   └── OS keyring (credentials)
@@ -110,21 +111,43 @@ Tauri Commands (Rust application coordination)
 ## Project Structure
 
 ```txt
-src
-├── components      # UI components
-├── pages           # Chat page / Settings page
-├── store           # Zustand state management
-├── core            # Tauri client & types
-├── i18n            # Internationalization (en / zh)
-└── utils           # Utilities
+crates/
+├── mira-ai         # Portable protocol and optional OpenAI-compatible transport
+├── mira-agent      # Operational agent state and bounded validated tools
+└── mira-runtime    # Sessions, explicit model registry and injected context
 
-src-tauri/src
-├── chat.rs         # Tauri command handlers
-├── database.rs     # SQLite data layer
-├── memory.rs       # Memory extraction & injection
-├── model.rs        # OpenAI-compatible model gateway
-├── secrets.rs      # OS credential store access
-└── types.rs        # Shared types
+apps/mira-desktop/
+├── src             # React UI, Zustand store, IPC client and i18n
+├── tests           # Vitest unit/integration fixtures
+├── public          # Fonts and static assets
+└── src-tauri/src
+    ├── chat.rs         # Tauri application commands
+    ├── inference.rs    # Desktop prompts and Runtime adapter
+    ├── database.rs     # SQLite data layer
+    ├── memory.rs       # Memory policies and planner fallback
+    ├── cancellation.rs # Attempt-owned cancellation
+    ├── secrets.rs      # OS credential store access
+    └── types.rs        # Desktop IPC types
+```
+
+## Reusable Rust SDK
+
+Mira Desktop is a consumer of three independently usable MIT crates (Rust 1.88+):
+
+- [mira-ai](crates/mira-ai/README.md): provider-neutral messages and streams,
+  with an optional OpenAI-compatible HTTP transport.
+- [mira-agent](crates/mira-agent/README.md): agent state, validated sequential
+  tools and bounded cancellation-safe runs.
+- [mira-runtime](crates/mira-runtime/README.md): sessions, immutable model
+  bindings and caller-owned credentials/context.
+
+Agent and Runtime do not enable HTTP automatically. No package depends on
+Tauri, SQLite or keyring; storage and application policy stay with the consumer.
+The crates are implemented and tested locally, not published to a registry.
+
+```bash
+cargo +1.88.0 test --locked
+cargo +1.88.0 run -p mira-runtime --example offline_session --locked
 ```
 
 ## Docs
@@ -133,7 +156,7 @@ src-tauri/src
 - [Architecture](docs/architecture.md) — current design and target direction
 - [Design Contract](DESIGN.md) — tokens, layout, accessibility, error, and cancellation
 - [Engineering & Ops](docs/engineering.md) — build, CI, and what is still planned
-- [Testing](docs/testing.md) — unit, SQLite integration and mocked UI smoke
+- [Testing](docs/testing.md) — offline SDK, SQLite and mocked IPC fixtures
 - [Memory System](docs/memory-system.md)
 - [Project Context](docs/project-context.md)
 - [Security](docs/security.md)
@@ -144,7 +167,8 @@ src-tauri/src
 
 v1 focuses on local single-user, plain chat, long-term memory, local SQLite storage, and multi-provider config.
 
-**Not doing:** RAG, vector databases, tool calling, multi-user, cloud sync.
+**Not doing in Mira Desktop:** RAG, vector databases, tool calling, multi-user,
+cloud sync. Portable tool support in the SDK does not enable tools in the app.
 
 ## Fork It
 
@@ -159,4 +183,4 @@ PRs are welcome, but please open an issue first to discuss the direction.
 
 ## License
 
-[GPL-3.0](LICENSE)
+[MIT](LICENSE)
