@@ -1,0 +1,43 @@
+mira-session — third-party notices
+==================================
+
+This crate follows the session-journal format ideas of the Pi project
+(`@earendil-works/pi`, reference commit `a276dabe5`): an append-only JSONL log with a
+versioned header, `id`/`parentId`-linked entries, one entry per line, and an idempotent
+migration step on load. The translated design comes from Pi's coding-agent session manager
+(`packages/coding-agent/src/core/session-manager.ts`) and from the atomic-commit storage
+spine of Pi's `durable` package.
+
+Byte-level interoperability with Pi session files is not a goal, and the crate is not a
+line-by-line port. Field names are Mira's own `snake_case`, and the implementation
+deliberately fixes the durability gaps that Pi's JSONL storage has today (no `fsync`, no
+cross-process lock, no restrictive permissions, silently skipped malformed middle lines)
+instead of inheriting them, as required by
+[docs/adr/0007-bounded-pi-parity.md](../../docs/adr/0007-bounded-pi-parity.md).
+
+Pi is MIT licensed. The following notice is reproduced as required:
+
+MIT License
+
+Copyright (c) 2025 Mario Zechner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Other dependencies keep their own licenses; see `cargo license` output or each crate's
+manifest. Nothing in this notice relicenses a dependency.

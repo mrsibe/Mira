@@ -155,11 +155,22 @@ lossless.
   metadata entry silently becomes the resume point.
 - A read path appends a newline to repair a torn tail, which can race a writer.
 
-**Mira rules.** Single writer per session guarded by an advisory lock; appends
-followed by `fsync`; rewrites via temp file + `rename`; explicit restrictive
-permissions; a torn tail quarantined and reported, never silently truncated;
-middle-file corruption is an error, not a skipped line; the leaf recorded
-explicitly and validated against `parent_id` integrity.
+**Mira rules.** Single writer per session, guarded by an exclusive marker lock
+file: Rust 1.88 has no advisory file lock, so the marker is created
+exclusively, records its owner, is released on drop, and a marker left by a
+crashed writer is released only by an explicit recovery call that first checks
+the recorded owner. Appends are followed by `fsync`; rewrites go through a
+temp file that is `fsync`ed before `rename`, followed by a directory `fsync`.
+Files are explicitly restrictive (directory `0700`, files `0600`). A torn tail
+is quarantined and the quarantine copy is made durable _before_ the journal is
+replaced, and is retained if the repair fails; a valid final entry that merely
+lacks its newline is kept and terminated. Middle-file corruption is an error,
+not a skipped line. The parent graph is validated on load; the active leaf is
+the last appended entry, and projection selects conversation turns only, so a
+metadata entry appended through a session cannot change what the model sees. A
+journal loaded from elsewhere is not covered by that guarantee: an arbitrary
+trailing entry with another parent can select another branch, so an explicit
+leaf or branch pointer is deferred to P3, when branching exists.
 
 **Single source of truth.** The JSONL journal becomes canonical for
 conversation content. SQLite keeps projects, memories, settings, provider
@@ -189,6 +200,77 @@ dependency):
   not a goal and must not be claimed.
 - Serializing the `mira-ai` protocol types is part of P0 because the journal
   stores them. `Credential` must never become serializable.
+- Compatibility rule, stated precisely because the implementation cannot
+  preserve more: unknown fields are tolerated on read; unknown entry kinds and
+  unknown top-level entry fields survive a rewrite; unknown fields nested inside
+  a known payload (a message, its provenance, a content block, usage) do not.
+  Therefore any change to the payload shape requires a `SESSION_VERSION` bump,
+  and an unknown version is rejected immediately after the header is decoded,
+  before entries are interpreted and before any repair or rewrite. A reader
+  never rewrites a journal whose version it does not understand.
+
+### 5.2 P0.5 desktop integration and migration
+
+The desktop keeps its current behavior while the journal becomes the content
+source of truth. Nothing is deleted at any step.
+
+**Layout.** One journal per conversation under the application data directory,
+`sessions/<conversation-id>.jsonl`, with directory `0700` and files `0600`. The
+identifier is already a generated id, and `mira-session` rejects path
+separators, `..` and control characters, so an id cannot escape the directory.
+Pi groups sessions by working directory; Mira does not, because a conversation
+is not bound to a workspace.
+
+**What moves and what stays.** The journal holds the conversation content: user
+and assistant turns in order, model and thinking-level changes, reported usage,
+and later compaction and context edits. SQLite keeps projects, memories,
+settings, provider metadata and credentials-by-reference, and keeps the
+`conversations` row as an index entry (title, archive flag, timestamps,
+project) plus a rebuildable `messages`/`messages_fts` index.
+
+**Dual write is temporary.** The sequence is: write the journal first, then
+update the index; add a rebuild-from-journal path that reproduces the index;
+switch reads to journal plus index; keep the legacy tables until one release
+has passed verification. Content is never written to the index first, so the
+index can only lag the journal, never lead it. A lagging index is reported and
+rebuilt, not repaired by hand.
+
+**No behavior change in this phase.** Legacy assistant turns carry text and,
+for display, their stored reasoning. They are recorded with unknown-model
+provenance and, exactly as today, the model-visible projection for them stays
+text-only: a thinking block without a provider signature is never replayed.
+Signature-aware replay arrives in P2, not here. The prompt assembly, the
+message window and the memory flow stay as they are until P1 changes them
+deliberately.
+
+**Migration.** A dry run reports, per conversation, how many turns would be
+written and what cannot be represented losslessly; the user sees the summary
+before anything is written. Existing rows are exported into journals without
+the originals being removed or rewritten, so rollback is "stop reading the
+journal", not a data restore. Legacy assistant turns are marked rather than
+invented up: no reasoning field is fabricated and no signature is invented.
+
+**Deletion and archiving.** Archiving is an index-only flag. Deleting a
+conversation removes its journal file and its index rows together, with the
+file deletion attempted first so an interrupted delete leaves an orphan file
+that the next scan can report rather than a journal row without a file.
+
+**Failure windows.** A journal append that succeeds while the index write
+fails leaves a rebuildable index, reported to the caller. A journal write that
+fails leaves the index untouched. Credentials are not part of any of these
+steps, and no journal write ever contains a credential, an authorization
+header or a request body.
+
+**Attachments.** Images are image blocks inside the journal, bounded by
+`MAX_ENTRY_BYTES`. If a future image exceeds that bound, the blob must move to
+a content-addressed file next to the journal with only a reference stored; the
+journal must not silently truncate or drop an attachment.
+
+**Acceptance.** Reopening a conversation after a restart reproduces it exactly;
+a cancelled turn stores only the user message; a journal survives an abrupt
+process kill with at most the last append lost; a corrupted tail is quarantined
+and reported; no secret appears in any journal; the legacy tables remain intact
+and sufficient for rollback.
 
 ## 6. Phased roadmap
 
