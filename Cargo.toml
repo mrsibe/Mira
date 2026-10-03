@@ -5,5 +5,5 @@
 # explicitly with `-p mira`. See docs/adr/0006-rust-native-runtime.md.
 [workspace]
 resolver = "2"
-members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime", "apps/mira-desktop/src-tauri"]
-default-members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime"]
+members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime", "crates/mira-session", "apps/mira-desktop/src-tauri"]
+default-members = ["crates/mira-ai", "crates/mira-agent", "crates/mira-runtime", "crates/mira-session"]

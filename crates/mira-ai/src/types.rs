@@ -3,16 +3,46 @@
 //! These types describe one model request and its streamed response. They carry no HTTP,
 //! storage or application concerns, so `mira-agent` and `mira-runtime` can depend on them
 //! directly. See [ADR 0006](../../../docs/adr/0006-rust-native-runtime.md).
+//!
+//! # Serialized wire shape
+//!
+//! The protocol wire types ([`Message`], [`AssistantContent`], [`InputContent`], the structs
+//! they carry) implement [`serde::Serialize`] and [`serde::Deserialize`] so a stored turn can
+//! be replayed losslessly; [`Model`] and [`ModelCapabilities`] are caller-side configuration
+//! metadata and deliberately do not. The shape is part of the protocol and stable:
+//!
+//! - Role-bearing enums ([`Message`], [`AssistantContent`], [`InputContent`]) use internal
+//!   tagging: `#[serde(tag = "type", rename_all = "snake_case")]`, so a variant is
+//!   `{"type":"<snake_case variant>", ..variant fields}`. Struct and newtype-of-struct
+//!   variants only; no tuple variants, because internal tagging cannot encode them.
+//! - Plain enums ([`Api`], [`StopReason`]) serialize as the stable identifier string
+//!   ([`Api::as_str`], snake_case for `StopReason`). Plain structs serialize as objects with
+//!   their field names unchanged.
+//! - Optional fields are written as JSON `null` when absent and are accepted as absent when
+//!   read, so an older reader still loads a newer file. Unknown extra fields are ignored on
+//!   read (no `deny_unknown_fields`) for the same reason.
+//! - Nothing is dropped on a round trip: thinking signatures and the redacted flag, tool call
+//!   `arguments_raw`/`arguments`/`signature`, `AssistantSource` provenance, `StopReason`,
+//!   optional `Usage` cache/reasoning counts, text and image parts are all preserved.
+//!
+//! [`Credential`](crate::Credential) is deliberately outside this contract: it does not
+//! implement `Serialize`, `Deserialize` or a leaking `Debug`, so the type itself cannot reach a
+//! journal, a log or a serialized request payload through these types.
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Transport family that serves a model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// Serializes as the stable identifier returned by [`Api::as_str`], for example
+/// `"openai-completions"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum Api {
     /// OpenAI-compatible Chat Completions, served at `POST {base_url}/chat/completions`.
+    #[serde(rename = "openai-completions")]
     OpenAiCompletions,
 }
 
@@ -75,7 +105,7 @@ pub struct ModelCapabilities {
 }
 
 /// Text content block.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextBlock {
     /// Text content.
     pub text: String,
@@ -89,7 +119,7 @@ impl TextBlock {
 }
 
 /// Base64 image input.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ImageInput {
     /// Media type of the payload, for example `image/png`.
     pub media_type: String,
@@ -108,19 +138,28 @@ impl ImageInput {
 }
 
 /// Thinking/reasoning content block.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `thinking` is untrusted, unredacted model output and must not be logged. A round trip
+/// preserves both [`ThinkingBlock::signature`] and [`ThinkingBlock::redacted`], because a
+/// provider rejects a replayed thinking block whose signature was dropped.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThinkingBlock {
     /// Reasoning text. Empty when the provider redacted it.
     pub thinking: String,
     /// Opaque provider signature for replay, for example the response field the reasoning
     /// arrived in. Consumers store and re-send it but must not interpret it.
+    #[serde(default)]
     pub signature: Option<String>,
     /// True when provider safety filters replaced the reasoning text with opaque content.
     pub redacted: bool,
 }
 
 /// Content accepted in user messages and tool results.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializes with internal tagging: `{"type":"text","text":".."}` or
+/// `{"type":"image","media_type":"..","base64_data":".."}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum InputContent {
     /// Text part.
@@ -142,7 +181,10 @@ impl InputContent {
 }
 
 /// A tool call the model asked the consumer to execute.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// All three argument forms survive a round trip: `arguments_raw` is the provider's exact
+/// text, `arguments` the strictly parsed object, and `signature` the opaque provider value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
     /// Provider tool call identifier, used to pair the call with its result.
     pub id: String,
@@ -153,14 +195,20 @@ pub struct ToolCall {
     /// Strictly parsed arguments. `None` when `arguments_raw` is not complete, valid JSON
     /// object text, for example after the provider stopped at its output token limit.
     /// A call with `None` arguments must never be executed.
+    #[serde(default)]
     pub arguments: Option<Value>,
     /// Opaque provider signature attached to the call, for example a thought signature.
     /// The OpenAI-compatible transport does not produce or consume one.
+    #[serde(default)]
     pub signature: Option<String>,
 }
 
 /// Content a model can produce.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// Serializes with internal tagging: `{"type":"text",..}`, `{"type":"thinking",..}` or
+/// `{"type":"tool_call",..}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum AssistantContent {
     /// Visible text.
@@ -172,7 +220,7 @@ pub enum AssistantContent {
 }
 
 /// User turn.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserMessage {
     /// Text and image parts, in order. An empty list is valid input and is skipped when encoding.
     pub content: Vec<InputContent>,
@@ -188,7 +236,7 @@ impl UserMessage {
 }
 
 /// Tool result turn.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolResultMessage {
     /// Identifier of the [`ToolCall`] this result answers.
     pub tool_call_id: String,
@@ -201,7 +249,7 @@ pub struct ToolResultMessage {
 }
 
 /// Assistant turn.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AssistantMessage {
     /// Who produced the message.
     pub source: AssistantSource,
@@ -213,10 +261,13 @@ pub struct AssistantMessage {
     /// characters and truncated. It is never used as a human-readable description.
     /// This is untrusted and not redacted: like message content, it may contain sensitive
     /// data and must not be logged or treated as a safe diagnostic.
+    #[serde(default)]
     pub raw_stop_reason: Option<String>,
     /// Reported token usage, or `None` when the provider did not report any.
+    #[serde(default)]
     pub usage: Option<Usage>,
     /// Constant explanation for [`StopReason::Failed`]. Provider prose is never copied here.
+    #[serde(default)]
     pub error_message: Option<String>,
 }
 
@@ -242,7 +293,10 @@ impl AssistantMessage {
 }
 
 /// Which provider, transport and model produced an assistant message.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Provenance is what makes a stored turn replayable: all five fields are written and read
+/// back unchanged, including the provider's reported response model and response id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssistantSource {
     /// Transport that produced the message.
     pub api: Api,
@@ -251,13 +305,18 @@ pub struct AssistantSource {
     /// Model identifier the caller requested.
     pub model: String,
     /// Concrete model the provider reported when it differs from the requested one.
+    #[serde(default)]
     pub response_model: Option<String>,
     /// Provider response identifier when the stream reported one.
+    #[serde(default)]
     pub response_id: Option<String>,
 }
 
 /// Why the model stopped producing output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Serializes as `"end_turn"`, `"max_tokens"`, `"tool_use"` or `"failed"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum StopReason {
     /// The model finished its turn (`stop`).
     EndTurn,
@@ -277,20 +336,27 @@ pub enum StopReason {
 /// Usage is present only when the provider reported it; the transport never fabricates
 /// zero counts. Cache and reasoning counts are optional because providers report them
 /// inconsistently.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Usage {
     /// `prompt_tokens` as reported.
     pub input_tokens: u64,
     /// `completion_tokens` as reported. Includes [`Usage::reasoning_tokens`].
     pub output_tokens: u64,
     /// Reported cache-read input tokens, a subset of [`Usage::input_tokens`].
+    #[serde(default)]
     pub cached_input_tokens: Option<u64>,
     /// Reported reasoning tokens, a subset of [`Usage::output_tokens`].
+    #[serde(default)]
     pub reasoning_tokens: Option<u64>,
 }
 
 /// One turn in a conversation.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// Serializes with internal tagging: `{"type":"user",..}`, `{"type":"assistant",..}` or
+/// `{"type":"tool_result",..}`. The tag is the only place a role is written; the payload
+/// fields keep their own names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Message {
     /// User turn.

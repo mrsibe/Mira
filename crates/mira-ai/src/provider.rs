@@ -22,8 +22,11 @@ pub const DEFAULT_MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 /// A bearer credential supplied explicitly for exactly one request.
 ///
-/// Credentials are never read from the environment, a global registry or a database, and the
-/// type deliberately does not implement `Serialize` or a leaking `Debug`.
+/// Credentials are never read from the environment, a global registry or a database. The type
+/// itself implements neither `Serialize` nor `Deserialize` and has a redacting `Debug`, so a
+/// `Credential` value cannot be stored or logged directly. This is a type-level exclusion only:
+/// [`Credential::expose_secret`] still returns the secret, so a caller must not copy it into a
+/// message text, an error or a log line.
 #[derive(Clone)]
 pub struct Credential {
     secret: String,
@@ -55,7 +58,11 @@ impl fmt::Debug for Credential {
 }
 
 /// Provider-neutral reasoning effort requested for one turn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// `Serialize`/`Deserialize` write the same `snake_case` value as [`ReasoningLevel::as_str`],
+/// so a stored thinking level survives a reload unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ReasoningLevel {
     /// Smallest useful reasoning effort.
