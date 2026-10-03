@@ -11,5 +11,6 @@ status, the decision, and the consequences. Superseded decisions stay in place.
 | [0004](0004-bounded-automatic-memory.md) | Accepted                              | Keep automatic memory bounded and relevance-gated                       |
 | [0005](0005-extension-boundary.md)       | Accepted                              | Hold the product boundary against IDE/agent/knowledge-base scope        |
 | [0006](0006-rust-native-runtime.md)      | Accepted; implemented                 | Independent MIT Rust AI/Agent/Runtime packages consumed by Mira Desktop |
+| [0007](0007-bounded-pi-parity.md)        | Accepted                              | JSONL sessions and bounded client capabilities; no platform scope       |
 
 See [../architecture.md](../architecture.md) for how these fit together.

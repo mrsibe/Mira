@@ -110,4 +110,6 @@ updater             Released updater manifest
 - [docs/memory-system.md](docs/memory-system.md) — memory types and flows.
 - [docs/project-context.md](docs/project-context.md) — project context retrieval.
 - [docs/security.md](docs/security.md) — credential and destructive-action notes.
+- [docs/pi-parity-plan.md](docs/pi-parity-plan.md) — approved Pi-parity
+  roadmap (not implemented).
 - [docs/adr/](docs/adr/) — architecture decision records.
